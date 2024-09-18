@@ -7,7 +7,8 @@ from nes_py.wrappers import JoypadSpace
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from modules import *
+from Agent import *
+from Logger import *
 
 device = torch.device('cpu')
 if torch.cuda.is_available():
@@ -24,54 +25,33 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, COMPLEX_MOVEMENT)
 
-obs = env.reset()
+player = FDQN_Agent(12, batch_size=32, size=w, device=device)
+episodes = 50
+logger = Logger()
 
-player = Agent(12, batch_size=32, size=w, device=device)
-reward = 0
-warmup = 250
-skip = 4
-avg_reward = 0
-epsilon = 0.1
-count = 0
+for episode in range(1, episodes+1):
 
-for iter in range(100000):
+    state = env.reset()
 
-    state = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
-    action = player.act(state, epsilon)
-    next_state, reward, done, info = env.step(action)
-    player.cache(state.squeeze(0), next_state, action, reward, done)
-    count += 1
+    while True:
 
-    if done:
-        avg_reward = 0
-        count = 0
-        state = env.reset()
+        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        action = player.act(state)
+        next_state, reward, done, info = env.step(action)
+        player.cache(state.squeeze(0), next_state, action, reward, done)
 
-    if iter < warmup:
-        avg_reward += reward / (count + 1)
-        print(f'Iter: {iter}, Reward: {reward}, Avg Reward: {avg_reward}')
+        q, loss = player.learn()
+
+        if q is not None and loss is not None and reward is not None:
+            logger.log_step(reward, loss, q)
+
+        if done:
+            break
+
         env.render()
-        continue
+        state = state.squeeze(0)
 
-    if iter == warmup:
-        print('Warmup done')
-        avg_reward = 0
-        count = 0
-
-    avg_reward += reward / (count + 1)
-    states, next_states, actions, rewards, dones = player.sample_from_memory()
-
-    td_estimate = player.td_estimate(states, actions)
-    td_target = player.td_target(rewards, next_states)
-    loss = player.update_q_online(td_estimate, td_target)
-
-    env.render()
-
-    if iter % 100 == 0:
-        player.update_target()
-        print(f'Iter: {iter}, Loss: {loss}, Avg Reward: {avg_reward}')
-
-    if done:
-        state = env.reset()
+    logger.log_episode()
+    logger.print_last_episode()
 
 env.close()

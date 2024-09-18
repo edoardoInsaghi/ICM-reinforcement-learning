@@ -1,65 +1,18 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-
-
-class ConvBlock(nn.Module):
-
-    def __init__(self, in_channels, out_channels, stride=1, kernel_size=3):
-        super(ConvBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        return self.relu(self.bn(self.conv(x)))
-        
-
-
-class Net(nn.Module):
-
-    def __init__(self, channels_in, action_space, size=84, net="fdql"):
-        super(Net, self).__init__()
-        
-        self.blocks = nn.ModuleList(
-            [ConvBlock(channels_in, 32, kernel_size=8, stride=4)] + 
-            [ConvBlock(32, 64, kernel_size=4, stride=2)] + 
-            [ConvBlock(64, 64, stride=1)]
-        )
-
-        self.fc1 = nn.Linear(3136, 512)
-        self.fc2target = nn.Linear(512, action_space)
-        self.fc2online = nn.Linear(512, action_space)
-
-        if net == "fdql":
-            for p in self.fc2target.parameters():
-                p.requires_grad = False
-        
-
-    def forward(self, x, model):
-        B, C, H, W = x.shape
-
-        for block in self.blocks:
-            x = block(x)
-        
-        x = x.view(B, -1)
-        x = F.relu(self.fc1(x))
-
-        x = self.fc2online(x) if model=="online" else self.fc2target(x)
-
-        return x
+from Modules import *
+from abc import abstractmethod
 
 
 class Agent():
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-                 device="cpu", sync_every=1000, learn_every=4, warmup=1000, 
+                 device="cpu", learn_every=4, warmup=1000, 
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
         
         self.counter = 0
-        self.sync_every = sync_every
         self.learn_every = learn_every
         self.warmup = warmup
         self.action_space = action_space
@@ -92,19 +45,38 @@ class Agent():
         n = n if n is not None else self.batch_size
         idx = np.random.choice(len(self.memory), n, replace=False)
         samples = [self.memory[i] for i in idx]
-        states = torch.stack([s["State"] for s in samples])
-        next_states = torch.stack([s["Next_state"] for s in samples])
-        actions = torch.stack([s["Action"] for s in samples])
-        rewards = torch.stack([s["Reward"] for s in samples])
-        dones = torch.stack([s["Done"] for s in samples])
+        states = torch.stack([s["State"] for s in samples]).to(self.device) 
+        next_states = torch.stack([s["Next_state"] for s in samples]).to(self.device)
+        actions = torch.stack([s["Action"] for s in samples]).to(self.device)
+        rewards = torch.stack([s["Reward"] for s in samples]).to(self.device)
+        dones = torch.stack([s["Done"] for s in samples]).to(self.device)
 
         return states, next_states, actions, rewards, dones
+    
+    @abstractmethod
+    def act(self, state):
+        pass
+
+    @abstractmethod
+    def learn(self):
+        pass
+
+
+
+class FDQN_Agent(Agent):
+
+    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
+                 device="cpu", learn_every=4, warmup=1000,
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000):
+        
+        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
+                         learn_every, warmup, epsilon, epsilon_min, epsilon_decay)
+
+        self.sync_every = sync_every
 
 
     def td_estimate(self, state, action):
         self.net.eval()
-        state = state.to(self.device)
-        action = action.to(self.device)
         q = self.net(state, "online")[np.arange(0, self.batch_size), action]
         return q
     
@@ -112,8 +84,6 @@ class Agent():
     @torch.no_grad()
     def td_target(self, reward, next_state):
         self.net.eval()
-        reward = reward.to(self.device)
-        next_state = next_state.to(self.device)
         q_online = self.net(next_state, "online")
         a = torch.argmax(q_online, dim=1)
         q_target = self.net(next_state, "target")[np.arange(0, self.batch_size), a]
@@ -164,26 +134,72 @@ class Agent():
         loss = self.update_q_online(td_est, td_tgt)
 
         return td_est.mean().item(), loss
-
-
-
-
-if __name__ == "__main__":
-    mario = Agent(14)
-
-    tdestimate = mario.td_estimate(torch.randn(32, 4, 84, 84), 1)
-    tdtarget = mario.td_target(1, torch.randn(32, 4, 84, 84))
-    loss = mario.update_q_online(tdestimate, tdtarget)
-    mario.update_target()
-    action = mario.act(torch.randn(1, 4, 84, 84), 0.1)
-    print(tdestimate, tdestimate.shape)
-    print(tdtarget, tdtarget.shape)
-    print(loss, action)
-
-
     
 
 
+class DDQN_Agent(Agent):
 
+    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
+                device="cpu", learn_every=4, warmup=1000, 
+                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
     
+        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
+                         learn_every, warmup, epsilon, epsilon_min, epsilon_decay)
         
+
+    def update_q(self, state, next_state, action, reward):
+        self.net.train()
+        q1 = self.net(next_state, "online")[np.arange(0, self.batch_size), action]
+        action1 = torch.argmax(q1, dim=1)
+        q2 = self.net(next_state, "target")[np.arange(0, self.batch_size), action]
+        action2 = torch.argmax(q2, dim=1)
+
+        qval1 = self.net(state, "target")[np.arange(0, self.batch_size), action1]
+        qval2 = self.net(state, "online")[np.arange(0, self.batch_size), action2]   
+
+        action = 
+
+
+        
+
+    def act(self, state):
+        self.counter += 1
+        if self.counter == self.warmup:
+            print("Warmup done")
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.action_space)
+        else:
+            self.net.eval()
+            state = state.to(self.device)
+            if np.random.rand() < 0.5:
+                q = self.net(state, "online")
+            else:
+                q = self.net(state, "target")
+
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+            return torch.argmax(q).item()
+        
+
+    def learn(self):
+
+        if self.counter % self.learn_every != 0:
+            return None, None
+
+        if self.counter < self.warmup:
+            return None, None
+        
+        state, next_state, action, reward, done = self.sample_from_memory()
+
+        self.net.train()
+
+
+
+
+        
+
+    
+    
+
+
+
+
