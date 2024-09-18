@@ -2,7 +2,7 @@ from audioop import avg
 import gym
 import gym_super_mario_bros
 from gym.wrappers import GrayScaleObservation, FrameStack
-from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT, SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,9 +23,9 @@ env = gym_super_mario_bros.make('SuperMarioBros-v0')
 env = gym.wrappers.ResizeObservation(env, (w, w)) 
 env = GrayScaleObservation(env)     
 env = FrameStack(env, 4) 
-env = JoypadSpace(env, COMPLEX_MOVEMENT)
+env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = FDQN_Agent(12, batch_size=32, size=w, device=device)
+player = DDQN_Agent(7, batch_size=32, size=w, device=device, algo="DDQN")
 episodes = 50
 logger = Logger()
 
