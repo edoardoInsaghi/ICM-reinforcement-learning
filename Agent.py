@@ -44,9 +44,9 @@ class Agent():
 
 
     def sample_from_memory(self, n=None):
-        n = n if n is not None else self.batch_size - 5
+        n = n if n is not None else self.batch_size - 10
         idx = np.random.choice(len(self.memory), n, replace=False)
-        samples = [self.memory[i] for i in idx] + [self.memory[-i] for i in range(1, 6)]
+        samples = [self.memory[i] for i in idx] + [self.memory[-i] for i in range(1, 11)]
         states = torch.stack([s["State"] for s in samples]).to(self.device) 
         next_states = torch.stack([s["Next_state"] for s in samples]).to(self.device)
         actions = torch.stack([s["Action"] for s in samples]).to(self.device)
@@ -86,9 +86,8 @@ class FDQN_Agent(Agent):
     @torch.no_grad()
     def td_target(self, reward, next_state):
         self.net.eval()
-        q_online = self.net(next_state, "online")
-        a = torch.argmax(q_online, dim=1)
-        q_target = self.net(next_state, "target")[np.arange(0, self.batch_size), a]
+        q_target = self.net(next_state, "target")
+        q_target = torch.max(q_target, dim=1).values
         return reward + self.gamma * q_target
 
 
@@ -185,13 +184,13 @@ class DDQN_Agent(Agent):
         loss2 = self.loss(target1, q2t) 
 
         if np.random.rand() < 0.5:
-            self.optimizer1.zero_grad()
+            self.optimizer.zero_grad()
             loss1.backward()
-            self.optimizer1.step()
+            self.optimizer.step()
         else:
-            self.optimizer2.zero_grad()
+            self.optimizer.zero_grad()
             loss2.backward()
-            self.optimizer2.step()
+            self.optimizer.step()
 
         return (q1t.mean().item() + q2t.mean().item()) / 2, (loss1.item() + loss2.item()) / 2
 
@@ -226,16 +225,4 @@ class DDQN_Agent(Agent):
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
         return mean_q, loss 
-
-
-
-
-
-        
-
-    
-    
-
-
-
 

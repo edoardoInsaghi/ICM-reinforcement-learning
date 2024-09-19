@@ -25,7 +25,7 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = DDQN_Agent(7, batch_size=32, size=w, device=device, algo="DDQN")
+player = DDQN_Agent(7, batch_size=64, size=w, device=device, algo="ddqn")
 episodes = 50
 logger = Logger()
 
@@ -42,8 +42,7 @@ for episode in range(1, episodes+1):
 
         q, loss = player.learn()
 
-        if q is not None and loss is not None and reward is not None:
-            logger.log_step(reward, loss, q)
+        logger.log_step(reward, loss, q)
 
         if done:
             break
