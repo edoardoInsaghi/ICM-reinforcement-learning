@@ -36,6 +36,9 @@ class Net(nn.Module):
         if algo == "fdql":
             for p in self.fc2target.parameters():
                 p.requires_grad = False
+
+        if algo == "ac":
+            self.fc2target = nn.Linear(512, 1)  
         
 
     def forward(self, x, model):
