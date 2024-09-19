@@ -25,24 +25,33 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = AC_Agent(7, batch_size=64, size=w, device=device, algo="ac", warmup=100)
+player = AC_Agent(7, batch_size=64, size=w, device=device, algo="ac", warmup=1000)
 episodes = 50
 logger = Logger()
 
 for episode in range(1, episodes+1):
 
     state = env.reset()
-
+    state = np.asarray(state)
+    state = state / 255.0
+    
     while True:
-
+        
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        
+        #print("Min pixel value:", torch.min(state).item())
+        #print("Max pixel value:", torch.max(state).item())
         action = player.act(state)
+        
         next_state, reward, done, info = env.step(action)
+        next_state = np.asarray(next_state)
+        next_state = next_state / 255.0 
+        
         player.cache(state.squeeze(0), next_state, action, reward, done)
 
-        q, loss = player.learn()
+        #q, loss = player.learn()
 
-        # logger.log_step(reward, loss, q)
+        logger.log_step(reward, loss, q)
 
         if done:
             break

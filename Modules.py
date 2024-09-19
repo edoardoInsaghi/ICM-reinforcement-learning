@@ -29,7 +29,8 @@ class Net(nn.Module):
             [ConvBlock(64, 64, stride=1)]
         )
 
-        self.fc1 = nn.Linear(3136, 512)
+        self.fc1target = nn.Linear(3136, 512)
+        self.fc1online = nn.Linear(3136, 512)
         self.fc2target = nn.Linear(512, action_space)
         self.fc2online = nn.Linear(512, action_space)
 
@@ -46,11 +47,16 @@ class Net(nn.Module):
 
         for block in self.blocks:
             x = block(x)
-        
+            
         x = x.view(B, -1)
-        x = F.relu(self.fc1(x))
-
-        x = self.fc2online(x) if model=="online" else self.fc2target(x)
+        
+        if model == "online":
+            x = F.relu(self.fc1online(x))
+            x = self.fc2online(x)
+        
+        else:
+            x = F.relu(self.fc1target(x))
+            x = self.fc2target(x)
 
         return x
         

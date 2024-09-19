@@ -32,7 +32,7 @@ class Logger():
 
 
     def log_episode(self):
-        self.rewards.append(np.round(self.curr_ep_reward / self.curr_ep_length, self.round))
+        self.rewards.append(np.round(self.curr_ep_reward / (self.curr_ep_length + 1e-6), self.round))
         self.lengths.append(np.round(self.curr_ep_length, self.round))
         assert self.curr_ep_loss_length > 0 
         avg_loss = self.curr_ep_loss / self.curr_ep_loss_length

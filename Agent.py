@@ -9,7 +9,7 @@ from abc import abstractmethod
 
 class Agent():
 
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
+    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, algo="fdqn"):
         
@@ -223,6 +223,13 @@ class AC_Agent(Agent):
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, algo)
         
+        self.shared_params = list(self.net.blocks.parameters())
+        self.actor_params =  list(self.net.fc1online.parameters()) + list(self.net.fc2online.parameters())
+        self.critic_params = list(self.net.fc1target.parameters()) +list(self.net.fc2target.parameters())
+        
+        self.optimizer_actor = optim.Adam(self.shared_params + self.actor_params, lr=lr)
+        self.optimizer_critic = optim.Adam(self.shared_params + self.critic_params, lr=lr)
+        
     
     def act(self, state):
         self.counter += 1
@@ -253,16 +260,20 @@ class AC_Agent(Agent):
         p = torch.softmax(p, dim=1)
         vt = self.net(state, "target")
         vtnext = self.net(next_state, "target")
-        advantage = reward + self.gamma * vtnext - vt
+        advantage = (reward + self.gamma * vtnext - vt)
         log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
         policy_loss = -log_p.unsqueeze(1) * advantage
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
-        self.optimizer.zero_grad()
-        policy_loss.mean().backward(retain_graph=True) 
+        self.optimizer_actor.zero_grad()
+        policy_loss.mean().backward(retain_graph=True)
+        self.optimizer_critic.zero_grad()
         value_loss.backward()
-        self.optimizer.step()
-
-        return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
+        
+        self.optimizer_critic.step()
+        self.optimizer_actor.step()
+        
+        
+        return vt.mean().item(), [policy_loss.mean().item() + value_loss.mean().item()]
 
 
