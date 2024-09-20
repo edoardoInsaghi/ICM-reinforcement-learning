@@ -25,7 +25,7 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = AC_Agent(7, batch_size=64, size=w, device=device, warmup=100)
+player = AC_Agent(7, batch_size=64, size=w, device=device, warmup=1000)
 episodes = 50
 logger = Logger()
 

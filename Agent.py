@@ -149,7 +149,8 @@ class DDQN_Agent(Agent):
         
 
         self.net = Net(4, action_space, size, "ddqn").to(device)
-        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
+        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
+        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         
 
     def update_q(self, state, next_state, action, reward):
@@ -170,16 +171,16 @@ class DDQN_Agent(Agent):
         loss1 = self.loss(target2, q1t)
         loss2 = self.loss(target1, q2t) 
 
-        if np.random.rand() < 0.5:
-            self.optimizer.zero_grad()
-            loss1.backward()
-            self.optimizer.step()
-        else:
-            self.optimizer.zero_grad()
-            loss2.backward()
-            self.optimizer.step()
+        self.optimizer1.zero_grad()
+        self.optimizer2.zero_grad()
 
-        return (q1t.mean().item() + q2t.mean().item()) / 2, (loss1.item() + loss2.item()) / 2
+        loss1.backward(retain_graph=True)
+        loss2.backward()
+
+        self.optimizer1.step()
+        self.optimizer2.step()
+
+        return (q1t.mean().item() + q2t.mean().item()) / 2, [loss1.item(), loss2.item()]
 
 
     def act(self, state):
@@ -225,7 +226,8 @@ class AC_Agent(Agent):
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
         
         self.net = Net(4, action_space, size, "ac").to(device)
-        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
+        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
+        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         
     
     def act(self, state):
@@ -253,20 +255,30 @@ class AC_Agent(Agent):
         self.net.train()
         state = state.to(self.device)
         next_state = next_state.to(self.device)
+
         p = self.net(state, 1)
         p = torch.softmax(p, dim=1)
+
         vt = self.net(state, 2)
         vtnext = self.net(next_state, 2)
-        advantage = (reward + self.gamma * vtnext - vt)
-        log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
-        policy_loss = -log_p.unsqueeze(1) * advantage
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
-        self.optimizer.zero_grad()
-        policy_loss.mean().backward(retain_graph=True)
-        value_loss.backward()
-        self.optimizer.step()
         
-        return vt.mean().item(), [policy_loss.mean().item() + value_loss.mean().item()]
+        vtnew = self.net(state, 2)
+        vtnextnew = self.net(next_state, 2)
+        advantage = (reward + self.gamma * vtnextnew - vtnew)
+        log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
+        policy_loss = -log_p.unsqueeze(1) * advantage
+
+        self.optimizer2.zero_grad()
+        self.optimizer1.zero_grad()
+
+        value_loss.mean().backward(retain_graph=True)
+        policy_loss.mean().backward()
+
+        self.optimizer2.step()
+        self.optimizer1.step()
+
+        return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
 
 
