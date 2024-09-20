@@ -7,9 +7,9 @@ import numpy as np
 
 class ConvBlock(nn.Module):
 
-    def __init__(self, in_channels, out_channels, stride=1, kernel_size=3):
+    def __init__(self, in_channels, out_channels, stride=1, kernel_size=3, padding=0):
         super(ConvBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -64,3 +64,42 @@ class Net(nn.Module):
         else:
             return self.fc2(x)
         
+
+
+class Reverse_Dynamics_Module(nn.Module):
+
+    def __init__(self, size=84, action_space=12, device=torch.device('cpu')):
+        super(Reverse_Dynamics_Module, self).__init__()
+        self.size = size
+        self.action_space = action_space
+        self.device = device
+
+        self.blocks = nn.ModuleList(
+            [ConvBlock(4, 32, stride=2, padding=1)] + 
+            [ConvBlock(32, 32, stride=2, padding=1)] + 
+            [ConvBlock(32, 32, stride=2, padding=1)] +
+            [ConvBlock(32, 32, stride=2, padding=1)]
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(32*6*6*2, 256),
+            nn.ReLU(),
+            nn.Linear(256, action_space)
+        )
+
+    def forward(self, state, next_state):
+
+        x1 = torch.tensor(state, dtype=torch.float32).to(self.device)
+        x2 = torch.tensor(next_state, dtype=torch.float32).to(self.device).unsqueeze(0)
+        for block in self.blocks:
+              x1 = block(x1)
+              x2 = block(x2)
+
+        x = torch.cat((x1.view(1,-1), x2.view(1,-1)), dim=1)
+        print(x.shape)
+        return self.fc(x)
+        
+
+    def get_latent_state(self, state):
+        self.eval()
+        return self.blocks(state).Flatten()

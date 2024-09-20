@@ -53,6 +53,7 @@ class Agent():
 
         return states, next_states, actions, rewards, dones
     
+
     @abstractmethod
     def act(self, state):
         pass
@@ -263,7 +264,6 @@ class AC_Agent(Agent):
         vtnext = self.net(next_state, 2)
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
-        
         vtnew = self.net(state, 2)
         vtnextnew = self.net(next_state, 2)
         advantage = (reward + self.gamma * vtnextnew - vtnew)
@@ -282,3 +282,61 @@ class AC_Agent(Agent):
         return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
 
 
+
+
+"""
+class REINFORCE_Agent(Agent):
+
+    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
+                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+        
+        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+        
+        self.net = Net(4, action_space, size, "reinforce").to(device)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
+        self.max_memory = np.inf
+        self.baseline = 0.0
+
+    
+    def act(self, state):
+        self.counter += 1
+        if self.counter == self.warmup:
+            print("Warmup done")
+        
+        self.net.eval()
+        state = state.to(self.device)
+        p = self.net(state, 1)
+        p = torch.softmax(p, dim=1)
+        action = torch.multinomial(p, 1).item()
+        return action
+    
+
+    def learn(self):
+
+        cum_rewards = 0
+        total_loss = 0
+        n = len(self.memory)
+        for batch in range(0, n, self.batch_size):
+            states = torch.stack([self.memory[i]["State"] for i in range(batch, min(batch+self.batch_size, n))]).to(self.device)
+            actions = torch.stack([self.memory[i]["Action"] for i in range(batch, min(batch+self.batch_size, n))]).to(self.device)
+            rewards = torch.stack([self.memory[i]["Reward"] for i in range(batch, min(batch+self.batch_size, n))]).to(self.device)
+
+            cum_rewards += rewards.sum().item()
+
+            self.net.train()
+            p = self.net(states, 1)
+            p = torch.softmax(p, dim=1)
+            log_p = torch.log(p[np.arange(0, len(actions.squeeze())), actions.squeeze()])
+            loss = -log_p.unsqueeze(1) * (rewards - self.baseline)
+            self.optimizer.zero_grad()
+            loss.mean().backward()
+            self.optimizer.step()
+
+            total_loss += loss.mean().item()
+
+        self.baseline = cum_rewards / n
+
+        return cum_rewards, total_loss
+"""
