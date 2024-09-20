@@ -22,6 +22,8 @@ class Net(nn.Module):
 
     def __init__(self, channels_in, action_space, size=84, algo="fdql"):
         super(Net, self).__init__()
+
+        self.algo = algo
         
         self.blocks = nn.ModuleList(
             [ConvBlock(channels_in, 32, kernel_size=8, stride=4)] + 
@@ -29,34 +31,36 @@ class Net(nn.Module):
             [ConvBlock(64, 64, stride=1)]
         )
 
-        self.fc1target = nn.Linear(3136, 512)
-        self.fc1online = nn.Linear(3136, 512)
-        self.fc2target = nn.Linear(512, action_space)
-        self.fc2online = nn.Linear(512, action_space)
+        self.fc1 = nn.Sequential (
+            nn.Flatten(),
+            nn.Linear(3136, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self.fc2 = nn.Sequential (
+            nn.Flatten(),
+            nn.Linear(3136, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, action_space) if algo != "ac" else nn.Linear(512, 1)
+        )
 
         if algo == "fdql":
-            for p in self.fc2target.parameters():
+            for p in self.fc2.parameters():
                 p.requires_grad = False
 
-        if algo == "ac":
-            self.fc2target = nn.Linear(512, 1)  
         
 
-    def forward(self, x, model):
-        B, C, H, W = x.shape
+    def forward(self, x, model=1):
 
         for block in self.blocks:
             x = block(x)
-            
-        x = x.view(B, -1)
         
-        if model == "online":
-            x = F.relu(self.fc1online(x))
-            x = self.fc2online(x)
+        if model == 1:
+            return self.fc1(x)
         
         else:
-            x = F.relu(self.fc1target(x))
-            x = self.fc2target(x)
-
-        return x
+            return self.fc2(x)
         

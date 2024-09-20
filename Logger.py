@@ -18,7 +18,7 @@ class Logger():
         self.curr_ep_reward = 0.0
         self.curr_ep_length = 0
         self.curr_ep_loss_length = 0
-        self.curr_ep_loss = 0.0
+        self.curr_ep_loss = np.array([0.0, 0.0])
         self.curr_ep_q = 0.0
 
 
@@ -26,7 +26,7 @@ class Logger():
         self.curr_ep_reward += reward
         self.curr_ep_length += 1
         if loss is not None and q is not None:
-            self.curr_ep_loss += loss
+            self.curr_ep_loss += np.array(loss) if isinstance(loss, list) else np.array([loss, None])
             self.curr_ep_q += q
             self.curr_ep_loss_length += 1
 

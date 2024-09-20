@@ -11,9 +11,8 @@ class Agent():
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, algo="fdqn"):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
         
-        self.algo = algo
         self.lr = lr
         self.counter = 0
         self.learn_every = learn_every
@@ -26,10 +25,8 @@ class Agent():
         self.device = device
         self.memory = []
         self.max_memory = max_memory
-        self.net = Net(4, action_space, size=size, algo=self.algo).to(device)
         self.batch_size = batch_size
         self.loss = torch.nn.MSELoss(reduction="mean")
-        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
 
 
     def cache(self, state, next_state, action, reward, done):
@@ -70,24 +67,26 @@ class FDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, algo="fdqn"):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, algo)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
 
         self.sync_every = sync_every
+        self.net = Net(4, action_space, size, "fdqn").to(device)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
 
 
     def td_estimate(self, state, action):
         self.net.eval()
-        q = self.net(state, "online")[np.arange(0, self.batch_size), action]
+        q = self.net(state, 1)[np.arange(0, self.batch_size), action]
         return q
     
 
     @torch.no_grad()
     def td_target(self, reward, next_state):
         self.net.eval()
-        q_target = self.net(next_state, "target")
+        q_target = self.net(next_state, 2)
         q_target = torch.max(q_target, dim=1).values
         return reward + self.gamma * q_target
 
@@ -114,7 +113,7 @@ class FDQN_Agent(Agent):
         else:
             self.net.eval()
             state = state.to(self.device)
-            q = self.net(state, "online")
+            q = self.net(state, 1)
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             return torch.argmax(q).item()
         
@@ -143,11 +142,13 @@ class DDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, algo="ddqn"):
+                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
     
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, algo)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
         
+
+        self.net = Net(4, action_space, size, "ddqn").to(device)
         self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
         
 
@@ -155,16 +156,16 @@ class DDQN_Agent(Agent):
         self.net.train()
 
         # Select best action from both networks
-        q1 = self.net(next_state, "online")
+        q1 = self.net(next_state, 1)
         action1 = torch.argmax(q1, dim=1)
-        q2 = self.net(next_state, "target")
+        q2 = self.net(next_state, 2)
         action2 = torch.argmax(q2, dim=1)
 
-        target1 = self.gamma * self.net(state, "target")[np.arange(0, self.batch_size), action1] + reward
-        target2 = self.gamma * self.net(state, "online")[np.arange(0, self.batch_size), action2] + reward
+        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] + reward
+        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] + reward
 
-        q1t = self.net(state, "online")[np.arange(0, self.batch_size), action]
-        q2t = self.net(state, "target")[np.arange(0, self.batch_size), action]
+        q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
+        q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
 
         loss1 = self.loss(target2, q1t)
         loss2 = self.loss(target1, q2t) 
@@ -191,9 +192,9 @@ class DDQN_Agent(Agent):
             self.net.eval()
             state = state.to(self.device)
             if np.random.rand() < 0.5:
-                q = self.net(state, "online")
+                q = self.net(state, 1)
             else:
-                q = self.net(state, "target")
+                q = self.net(state, 2)
 
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             return torch.argmax(q).item()
@@ -218,17 +219,13 @@ class DDQN_Agent(Agent):
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, algo="ac"):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, algo)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
         
-        self.shared_params = list(self.net.blocks.parameters())
-        self.actor_params =  list(self.net.fc1online.parameters()) + list(self.net.fc2online.parameters())
-        self.critic_params = list(self.net.fc1target.parameters()) +list(self.net.fc2target.parameters())
-        
-        self.optimizer_actor = optim.Adam(self.shared_params + self.actor_params, lr=lr)
-        self.optimizer_critic = optim.Adam(self.shared_params + self.critic_params, lr=lr)
+        self.net = Net(4, action_space, size, "ac").to(device)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
         
     
     def act(self, state):
@@ -238,7 +235,7 @@ class AC_Agent(Agent):
         
         self.net.eval()
         state = state.to(self.device)
-        p = self.net(state, "online")
+        p = self.net(state, 1)
         p = torch.softmax(p, dim=1)
         action = torch.multinomial(p, 1).item()
         return action
@@ -256,23 +253,19 @@ class AC_Agent(Agent):
         self.net.train()
         state = state.to(self.device)
         next_state = next_state.to(self.device)
-        p = self.net(state, "online")
+        p = self.net(state, 1)
         p = torch.softmax(p, dim=1)
-        vt = self.net(state, "target")
-        vtnext = self.net(next_state, "target")
+        vt = self.net(state, 2)
+        vtnext = self.net(next_state, 2)
         advantage = (reward + self.gamma * vtnext - vt)
         log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
         policy_loss = -log_p.unsqueeze(1) * advantage
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
-        self.optimizer_actor.zero_grad()
+        self.optimizer.zero_grad()
         policy_loss.mean().backward(retain_graph=True)
-        self.optimizer_critic.zero_grad()
         value_loss.backward()
-        
-        self.optimizer_critic.step()
-        self.optimizer_actor.step()
-        
+        self.optimizer.step()
         
         return vt.mean().item(), [policy_loss.mean().item() + value_loss.mean().item()]
 
