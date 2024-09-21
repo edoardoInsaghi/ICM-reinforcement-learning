@@ -25,7 +25,7 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = DDQN_Agent(7, batch_size=64, size=w, device=device, warmup=1000)
+player = DUELING_Agent(7, batch_size=64, size=w, device=device, warmup=1000)
 episodes = 100000
 logger = Logger()
 rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
@@ -50,18 +50,18 @@ for episode in range(1, episodes+1):
 
         q, loss = player.learn()
 
-        #logger.log_step(reward, loss, q)
+        logger.log_step(reward, loss, q)
 
         if done:
             break
 
-        # env.render()
+        env.render()
         state = state.squeeze(0)
 
     if episode % 5 == 0:
-        player.net.save('ddqn.pth')
+        torch.save(player.net.state_dict(), "dueling.pth")
 
-    #logger.log_episode()
-    #logger.print_last_episode()
+    logger.log_episode()
+    logger.print_last_episode()
 
 env.close()

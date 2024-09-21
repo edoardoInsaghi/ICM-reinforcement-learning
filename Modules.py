@@ -44,19 +44,42 @@ class Net(nn.Module):
             nn.Linear(3136, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(512, action_space) if algo != "ac" else nn.Linear(512, 1)
+            nn.Linear(512, action_space) if algo != "ac" or algo != "dueling" else nn.Linear(512, 1)
         )
+
+        if algo == "dueling":
+
+            self.fc1_2 = nn.Sequential (
+                nn.Flatten(),
+                nn.Linear(3136, 512),
+                nn.BatchNorm1d(512),
+                nn.ReLU(),
+                nn.Linear(512, action_space)
+            )
+
+            self.fc2_2 = nn.Sequential (
+                nn.Flatten(),
+                nn.Linear(3136, 512),
+                nn.BatchNorm1d(512),
+                nn.ReLU(),
+                nn.Linear(512, 1)
+            )
 
         if algo == "fdql":
             for p in self.fc2.parameters():
                 p.requires_grad = False
 
         
-
     def forward(self, x, model=1):
 
         for block in self.blocks:
             x = block(x)
+
+        if self.algo == "dueling":
+            if model == 1:
+                return self.fc2(x) + self.fc1(x) - self.fc1(x).mean()
+            else:
+                return self.fc2_2(x) + self.fc1_2(x) - self.fc1_2(x).mean()
         
         if model == 1:
             return self.fc1(x)
@@ -96,7 +119,6 @@ class Reverse_Dynamics_Module(nn.Module):
               x2 = block(x2)
 
         x = torch.cat((x1.view(1,-1), x2.view(1,-1)), dim=1)
-        print(x.shape)
         return self.fc(x)
         
 

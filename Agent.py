@@ -13,19 +13,21 @@ class Agent():
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
         
-        self.lr = lr
-        self.counter = 0
-        self.learn_every = learn_every
-        self.warmup = warmup
+        self.counter = 0        
+        self.memory = []
+        self.max_memory = max_memory   
         self.action_space = action_space
-        self.gamma = gamma
-        self.epsilon = epsilon
+
+        self.gamma = gamma # Reward Discount
+        self.epsilon = epsilon # Exploration Rate
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
-        self.device = device
-        self.memory = []
-        self.max_memory = max_memory
+
+        self.warmup = warmup
+        self.lr = lr
+        self.learn_every = learn_every
         self.batch_size = batch_size
+        self.device = device
         self.loss = torch.nn.MSELoss(reduction="mean")
 
 
@@ -221,7 +223,7 @@ class DDQN_Agent(Agent):
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, temperature=1.0, min_temperature=0.1, temperature_decay=0.999997):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
@@ -229,7 +231,11 @@ class AC_Agent(Agent):
         self.net = Net(4, action_space, size, "ac").to(device)
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
-        
+
+        self.temperature = temperature
+        self.min_temperature = min_temperature
+        self.temperature_decay = temperature_decay
+
     
     def act(self, state):
         self.counter += 1
@@ -280,6 +286,83 @@ class AC_Agent(Agent):
         self.optimizer1.step()
 
         return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
+
+
+class DUELING_Agent(Agent):
+    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
+            device="cpu", learn_every=4, warmup=1000, lr=0.00025,
+            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+
+        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
+                    learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+        
+        self.net = Net(4, action_space, size, "dueling").to(device)
+        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
+        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=lr)
+        self.scheduler1 = torch.optim.lr_scheduler.CyclicLR(self.optimizer1, base_lr=1e-5, max_lr=1e-3, step_size_up=2000)
+        self.scheduler2 = torch.optim.lr_scheduler.CyclicLR(self.optimizer2, base_lr=1e-5, max_lr=1e-3, step_size_up=2000)
+            
+
+    def update_q(self, state, next_state, action, reward):
+        self.net.train()
+
+        # Select best action from both networks
+        q1 = self.net(next_state, 1)
+        action1 = torch.argmax(q1, dim=1)
+        q2 = self.net(next_state, 2)
+        action2 = torch.argmax(q2, dim=1)
+
+        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] + reward
+        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] + reward
+
+        q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
+        q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
+
+        loss1 = self.loss(target2, q1t)
+        loss2 = self.loss(target1, q2t) 
+
+        self.optimizer1.zero_grad()
+        self.optimizer2.zero_grad()
+
+        loss1.backward(retain_graph=True)
+        loss2.backward()
+
+        self.optimizer1.step()
+        self.optimizer2.step()
+
+        return (q1t.mean().item() + q2t.mean().item()) / 2, [loss1.item(), loss2.item()]
+
+
+    def act(self, state):
+        self.counter += 1
+        if self.counter == self.warmup:
+            print("Warmup done")
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.action_space)
+        else:
+            self.net.eval()
+            state = state.to(self.device)
+            if np.random.rand() < 0.5:
+                q = self.net(state, 1)
+            else:
+                q = self.net(state, 2)
+
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+            return torch.argmax(q).item()
+        
+
+    def learn(self):
+        if self.counter < self.warmup:
+            return None, None
+        
+        if self.counter % self.learn_every != 0:
+            return None, None
+
+        state, next_state, action, reward, done = self.sample_from_memory()
+
+        mean_q, loss = self.update_q(state, next_state, action, reward)
+
+        return mean_q, loss 
 
 
 
