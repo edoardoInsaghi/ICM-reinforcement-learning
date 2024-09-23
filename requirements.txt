@@ -3,3 +3,5 @@ torch==2.2.2
 gym_super_mario_bros==7.4.0
 numpy==1.23.5
 nes-py==8.2.1
+matplotlib==3.7.5
+opencv-python==4.10.0.84
