@@ -79,6 +79,7 @@ class FDQN_Agent(Agent):
         self.sync_every = sync_every
         self.net = Net(4, action_space, size, "fdqn").to(device)
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
+        self.h = 0
 
 
     def td_estimate(self, state, action):
@@ -108,17 +109,24 @@ class FDQN_Agent(Agent):
         self.net.fc2.load_state_dict(self.net.fc1.state_dict())
  
 
-    def act(self, state, show_stats=False):
+    def act(self, state, height, show_stats=True):
         self.counter += 1
         self.net.eval()
         q = self.net(state, 1)
+        q_ = None
+        if self.h > height:
+            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
+        self.h = height
         if self.counter == self.warmup:
             print("Warmup done")
         if np.random.rand() < self.epsilon:
             action = np.random.randint(self.action_space)
             color = 'g'
         else:
-            action = torch.argmax(q).item()
+            if q_ is not None:
+                action = torch.argmax(q_).item()
+            else:
+                action = torch.argmax(q).item()
             color = 'r' 
 
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -254,12 +262,12 @@ class AC_Agent(Agent):
         
         self.net.eval()
         state = state.to(self.device)
-        p = self.net(state, 1)
-        p = torch.softmax(p, dim=1)
+        q = self.net(state, 1)
+        p = torch.softmax(q, dim=1)
         action = torch.multinomial(p, 1).item()
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
+            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
 
         return action
     
@@ -287,25 +295,21 @@ class AC_Agent(Agent):
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
         log_policy = torch.log_softmax(p, dim=1)
-        entropy = -(p * log_policy).sum(1, keepdim=True)
+        entropy = -(p * log_policy).sum(1, keepdim=True).mean()
             
-        advantage = (reward + self.gamma * vtnext - vt)
+        advantage = (reward + self.gamma * vtnext - vt).detach()
         log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
-        policy_loss = -log_p.unsqueeze(1) * advantage
-    
-        # new_m = Categorical(p)
-        #entropy = -torch.sum(p[np.arange(0, self.batch_size), action.squeeze()] * log_p)
-        #entropy = torch.mean(new_m.entropy())
+        policy_loss = -log_p.unsqueeze(1) * advantage - self.beta * entropy
         
-        total_loss = policy_loss + value_loss - entropy * self.beta
+        #total_loss = policy_loss.mean() + value_loss #- entropy * self.beta
 
         #self.optimizer2.zero_grad()
         self.optimizer1.zero_grad()
 
         #value_loss.mean().backward(retain_graph=True)
         #policy_loss.mean().backward()
-
-        total_loss.mean().backward()
+        value_loss.backward(retain_graph=True)
+        policy_loss.mean().backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
 
         #self.optimizer2.step()

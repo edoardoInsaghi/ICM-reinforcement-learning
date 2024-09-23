@@ -28,7 +28,7 @@ env = FrameStack(env, 4)
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 
-player = AC_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.0001)
+player = FDQN_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025)
 episodes = 1000
 logger = Logger()
 # rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
@@ -36,6 +36,9 @@ logger = Logger()
 plt.ion()
 plt.show()
 
+y1 = 0
+y2 = 0
+height = 0
 for episode in range(1, episodes+1):
 
     state = env.reset()
@@ -43,13 +46,14 @@ for episode in range(1, episodes+1):
     
     while True:
         
-        action = player.act(state)
+        action = player.act(state, height)
         
         next_state, reward, done, info = env.step(action)
         next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
         next_state = next_state / 255.0 
         distance = info['x_pos']
-        
+        height = info['y_pos']
+
         player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
 
         q, loss = player.learn()
