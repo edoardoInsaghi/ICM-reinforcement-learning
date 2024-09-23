@@ -4,6 +4,7 @@ import gym_super_mario_bros
 from gym.wrappers import GrayScaleObservation, FrameStack
 from gym_super_mario_bros.actions import COMPLEX_MOVEMENT, SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
+import nes_py
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -18,6 +19,7 @@ elif torch.backends.mps.is_available():
     device = torch.device('mps')
     print('Using device MPS')
 
+
 w = 84
 env = gym_super_mario_bros.make('SuperMarioBros-v0')
 env = gym.wrappers.ResizeObservation(env, (w, w)) 
@@ -25,43 +27,45 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-player = DUELING_Agent(7, batch_size=64, size=w, device=device, warmup=1000)
-episodes = 100000
+
+player = FDQN_Agent(7, batch_size=64, device=device, warmup=1000, epsilon=0.1, epsilon_decay=0.9999)
+episodes = 1000
 logger = Logger()
-rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
+# rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
+
+plt.ion()
+plt.show()
 
 for episode in range(1, episodes+1):
 
     state = env.reset()
-    state = np.asarray(state)
-    state = state / 255.0
+    state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
     
     while True:
         
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        
-        action = player.act(state)
+        action = player.act(state, show_stats=True)
         
         next_state, reward, done, info = env.step(action)
-        next_state = np.asarray(next_state)
+        next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
         next_state = next_state / 255.0 
+        distance = info['x_pos']
         
-        player.cache(state.squeeze(0), next_state, action, reward, done)
+        player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
 
         q, loss = player.learn()
-
-        logger.log_step(reward, loss, q)
+        logger.log_step(reward, loss, q, distance)
 
         if done:
             break
 
         env.render()
-        state = state.squeeze(0)
+        state = next_state
 
     if episode % 5 == 0:
         torch.save(player.net.state_dict(), "dueling.pth")
 
-    logger.log_episode()
-    logger.print_last_episode()
+    if player.counter > player.warmup:
+        logger.log_episode()
+        logger.print_last_episode()
 
 env.close()

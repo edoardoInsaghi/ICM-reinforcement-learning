@@ -1,4 +1,4 @@
-from cv2 import log
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -32,8 +32,8 @@ class Agent():
 
 
     def cache(self, state, next_state, action, reward, done):
-        state = torch.tensor(state, dtype=torch.float32)
-        next_state = torch.tensor(next_state, dtype=torch.float32)
+        state = state.clone().detach()
+        next_state = next_state.clone().detach()
         action = torch.tensor([action])
         reward = torch.tensor([reward])
         done = torch.tensor([done])
@@ -104,21 +104,27 @@ class FDQN_Agent(Agent):
     
 
     def update_target(self):
-        self.net.fc2target.load_state_dict(self.net.fc2online.state_dict())
+        self.net.fc2.load_state_dict(self.net.fc1.state_dict())
  
 
-    def act(self, state):
+    def act(self, state, show_stats=False):
         self.counter += 1
+        self.net.eval()
+        q = self.net(state, 1)
         if self.counter == self.warmup:
             print("Warmup done")
         if np.random.rand() < self.epsilon:
-            return np.random.randint(self.action_space)
+            action = np.random.randint(self.action_space)
+            color = 'g'
         else:
-            self.net.eval()
-            state = state.to(self.device)
-            q = self.net(state, 1)
-            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-            return torch.argmax(q).item()
+            action = torch.argmax(q).item()
+            color = 'r'
+
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        if show_stats and self.counter > self.warmup:
+            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
+
+        return action
         
 
     def learn(self):
@@ -291,19 +297,20 @@ class AC_Agent(Agent):
 class DUELING_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
             device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9):
 
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                    learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
         
         self.net = Net(4, action_space, size, "dueling").to(device)
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=lr)
-        self.scheduler1 = torch.optim.lr_scheduler.CyclicLR(self.optimizer1, base_lr=1e-5, max_lr=1e-3, step_size_up=2000)
-        self.scheduler2 = torch.optim.lr_scheduler.CyclicLR(self.optimizer2, base_lr=1e-5, max_lr=1e-3, step_size_up=2000)
+        self.scheduler1 = torch.optim.lr_scheduler.CyclicLR(self.optimizer1, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)
+        self.scheduler2 = torch.optim.lr_scheduler.CyclicLR(self.optimizer2, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)
             
 
     def update_q(self, state, next_state, action, reward):
+
         self.net.train()
 
         # Select best action from both networks
@@ -318,6 +325,9 @@ class DUELING_Agent(Agent):
         q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
         q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
 
+        # print(f"Q1 from network 1: {q1.mean().item()}")
+        # print(f"Q2 from network 2: {q2.mean().item()}")
+
         loss1 = self.loss(target2, q1t)
         loss2 = self.loss(target1, q2t) 
 
@@ -330,11 +340,16 @@ class DUELING_Agent(Agent):
         self.optimizer1.step()
         self.optimizer2.step()
 
-        return (q1t.mean().item() + q2t.mean().item()) / 2, [loss1.item(), loss2.item()]
+        self.scheduler1.step()
+        self.scheduler2.step()
+
+        return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
 
 
     def act(self, state):
         self.counter += 1
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+
         if self.counter == self.warmup:
             print("Warmup done")
         if np.random.rand() < self.epsilon:
@@ -343,12 +358,9 @@ class DUELING_Agent(Agent):
             self.net.eval()
             state = state.to(self.device)
             if np.random.rand() < 0.5:
-                q = self.net(state, 1)
+                return self.net(state, 1).argmax().item()
             else:
-                q = self.net(state, 2)
-
-            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-            return torch.argmax(q).item()
+                return self.net(state, 2).argmax().item()
         
 
     def learn(self):
@@ -363,6 +375,21 @@ class DUELING_Agent(Agent):
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
         return mean_q, loss 
+    
+
+
+def plot_stats(q, action, color, v=None):
+    plt.clf()
+    bars = plt.bar(range(len(q)), q, width=0.4)
+    bars[action].set_color(color)
+    if v is not None:
+        plt.bar(range(len(v)), v, width=0.4, color="g")
+    plt.xlabel('Actions')
+    plt.ylabel('Q-values')
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.001)
+    plt.show(block=False)
 
 
 

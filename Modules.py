@@ -82,8 +82,7 @@ class Net(nn.Module):
                 return self.fc2_2(x) + self.fc1_2(x) - self.fc1_2(x).mean()
         
         if model == 1:
-            return self.fc1(x)
-        
+            return self.fc1(x) 
         else:
             return self.fc2(x)
         
