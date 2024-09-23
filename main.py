@@ -28,7 +28,7 @@ env = FrameStack(env, 4)
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 
-player = AC_Agent(7, batch_size=32, device=device, warmup=100, epsilon=1, epsilon_decay=0.999)
+player = AC_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.0001)
 episodes = 1000
 logger = Logger()
 # rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)

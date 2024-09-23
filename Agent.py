@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 from Modules import *
 from abc import abstractmethod
+from torch.distributions import Categorical
 
 
 class Agent():
@@ -278,20 +279,25 @@ class AC_Agent(Agent):
 
         p = self.net(state, 1)
         p = torch.softmax(p, dim=1)
+        epsilon = 1e-8
+        p = torch.clamp(p, epsilon, 1.0 - epsilon)
 
         vt = self.net(state, 2)
         vtnext = self.net(next_state, 2)
         value_loss = self.loss(vt, reward + self.gamma * vtnext)
 
-        vtnew = self.net(state, 2)
-        vtnextnew = self.net(next_state, 2)
-        advantage = (reward + self.gamma * vtnextnew - vtnew)
+        log_policy = torch.log_softmax(p, dim=1)
+        entropy = -(p * log_policy).sum(1, keepdim=True)
+            
+        advantage = (reward + self.gamma * vtnext - vt)
         log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
         policy_loss = -log_p.unsqueeze(1) * advantage
+    
+        # new_m = Categorical(p)
+        #entropy = -torch.sum(p[np.arange(0, self.batch_size), action.squeeze()] * log_p)
+        #entropy = torch.mean(new_m.entropy())
         
-        a = p[np.arange(0, self.batch_size), action.squeeze()]
-        entropy = -torch.sum(p[np.arange(0, self.batch_size), action.squeeze()] * log_p)
-        total_loss = policy_loss + value_loss + entropy * self.beta
+        total_loss = policy_loss + value_loss - entropy * self.beta
 
         #self.optimizer2.zero_grad()
         self.optimizer1.zero_grad()
@@ -300,8 +306,7 @@ class AC_Agent(Agent):
         #policy_loss.mean().backward()
 
         total_loss.mean().backward()
-        for param in self.net.parameters():
-            param.grad.data.clamp(-1, 1)
+        torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
 
         #self.optimizer2.step()
         self.optimizer1.step()
