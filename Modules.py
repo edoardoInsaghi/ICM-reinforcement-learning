@@ -44,7 +44,7 @@ class Net(nn.Module):
             nn.Linear(3136, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(512, action_space) if algo != "ac" or algo != "dueling" else nn.Linear(512, 1)
+            nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
         )
 
         if algo == "dueling":

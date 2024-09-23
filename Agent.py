@@ -44,9 +44,9 @@ class Agent():
 
 
     def sample_from_memory(self, n=None):
-        n = n if n is not None else self.batch_size - 10
+        n = n if n is not None else self.batch_size
         idx = np.random.choice(len(self.memory), n, replace=False)
-        samples = [self.memory[i] for i in idx] + [self.memory[-i] for i in range(1, 11)]
+        samples = [self.memory[i] for i in idx]
         states = torch.stack([s["State"] for s in samples]).to(self.device) 
         next_states = torch.stack([s["Next_state"] for s in samples]).to(self.device)
         actions = torch.stack([s["Action"] for s in samples]).to(self.device)
@@ -118,10 +118,10 @@ class FDQN_Agent(Agent):
             color = 'g'
         else:
             action = torch.argmax(q).item()
-            color = 'r'
+            color = 'r' 
 
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-        if show_stats and self.counter > self.warmup:
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
             plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
 
         return action
@@ -228,23 +228,26 @@ class DDQN_Agent(Agent):
 
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
+                 device="cpu", learn_every=4, warmup=1000, lr=0.00025, beta=0.01,
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, temperature=1.0, min_temperature=0.1, temperature_decay=0.999997):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
         
         self.net = Net(4, action_space, size, "ac").to(device)
-        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
-        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
+        self.optimizer1 = optim.Adam(self.net.parameters(), lr=lr)
+        self.loss = torch.nn.SmoothL1Loss(reduction="mean")
+        # self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
 
         self.temperature = temperature
         self.min_temperature = min_temperature
         self.temperature_decay = temperature_decay
+        self.beta = beta
 
     
-    def act(self, state):
+    def act(self, state, show_stats=True):
         self.counter += 1
+        color = 'r'
         if self.counter == self.warmup:
             print("Warmup done")
         
@@ -253,6 +256,10 @@ class AC_Agent(Agent):
         p = self.net(state, 1)
         p = torch.softmax(p, dim=1)
         action = torch.multinomial(p, 1).item()
+
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
+
         return action
     
 
@@ -281,14 +288,22 @@ class AC_Agent(Agent):
         advantage = (reward + self.gamma * vtnextnew - vtnew)
         log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
         policy_loss = -log_p.unsqueeze(1) * advantage
+        
+        a = p[np.arange(0, self.batch_size), action.squeeze()]
+        entropy = -torch.sum(p[np.arange(0, self.batch_size), action.squeeze()] * log_p)
+        total_loss = policy_loss + value_loss + entropy * self.beta
 
-        self.optimizer2.zero_grad()
+        #self.optimizer2.zero_grad()
         self.optimizer1.zero_grad()
 
-        value_loss.mean().backward(retain_graph=True)
-        policy_loss.mean().backward()
+        #value_loss.mean().backward(retain_graph=True)
+        #policy_loss.mean().backward()
 
-        self.optimizer2.step()
+        total_loss.mean().backward()
+        for param in self.net.parameters():
+            param.grad.data.clamp(-1, 1)
+
+        #self.optimizer2.step()
         self.optimizer1.step()
 
         return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
