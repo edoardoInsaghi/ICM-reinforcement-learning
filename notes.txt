@@ -1,0 +1,2 @@
+fdqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, sync_every=1000, memory_size=1e4
+

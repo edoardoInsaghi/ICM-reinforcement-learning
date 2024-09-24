@@ -18,7 +18,8 @@ if torch.cuda.is_available():
 elif torch.backends.mps.is_available():
     device = torch.device('mps')
     print('Using device MPS')
-
+else:
+    print('Using device CPU')
 
 w = 84
 env = gym_super_mario_bros.make('SuperMarioBros-v0')
@@ -27,18 +28,27 @@ env = GrayScaleObservation(env)
 env = FrameStack(env, 4) 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
+cluster = True
+save = True
 
-player = FDQN_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025, ckpt='fdqn.pth')
+player = DUELING_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025)#, ckpt='fdqn.pth')
 episodes = 1000000
 logger = Logger()
 # rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
 
 plt.ion()
-plt.show()
+two = True # Set True if function returns two q values
+if two:
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+    ax = [ax1, ax2]
+else: 
+    plt.show()
+    ax, show_stats = None, False
 
 y1 = 0
 y2 = 0
 height = 0
+
 for episode in range(1, episodes+1):
 
     state = env.reset()
@@ -46,7 +56,7 @@ for episode in range(1, episodes+1):
     
     while True:
         
-        action = player.act(state, height, show_stats=True)
+        action = player.act(state, height, show_stats=not cluster, ax=ax)
         
         next_state, reward, done, info = env.step(action)
         next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
@@ -61,12 +71,13 @@ for episode in range(1, episodes+1):
 
         if done:
             break
-
-        env.render()
+        
+        if not cluster:
+            env.render()
         state = next_state
 
-    if episode % 5 == 0:
-        torch.save(player.net.state_dict(), "fdqnlocal.pth")
+    if episode % 5 == 0 and save:
+        torch.save(player.net.state_dict(), "ddqn.pth")
 
     if player.counter > player.warmup:
         logger.log_episode()

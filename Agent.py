@@ -57,6 +57,11 @@ class Agent():
         return states, next_states, actions, rewards, dones
     
 
+    def mask_jumps(self, action):
+        map = {0:0, 1:1, 2:1, 3:3, 4:3, 5:0, 6:6}
+        return map[action]
+    
+
     @abstractmethod
     def act(self, state):
         pass
@@ -111,25 +116,24 @@ class FDQN_Agent(Agent):
         self.net.fc2.load_state_dict(self.net.fc1.state_dict())
  
 
-    def act(self, state, height, show_stats=True):
+    def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
+
         self.net.eval()
         q = self.net(state, 1)
-        q_ = None
-        if self.h > height:
-            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
-        self.h = height
+        
         if np.random.rand() < self.epsilon:
             action = np.random.randint(self.action_space)
             color = 'g'
         else:
-            if q_ is not None:
-                action = torch.argmax(q_).item()
-            else:
-                action = torch.argmax(q).item()
+            action = torch.argmax(q).item()
+            if height < self.h:
+                action = self.mask_jumps(action)
             color = 'r' 
 
+        self.h = height
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
             plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
 
@@ -160,13 +164,15 @@ class DDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None):
     
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
         
 
         self.net = Net(4, action_space, size, "ddqn").to(device)
+        if ckpt is not None:
+            self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         self.h = 0
@@ -200,7 +206,7 @@ class DDQN_Agent(Agent):
         self.optimizer1.step()
         self.optimizer2.step()
 
-        return (q1t.mean().item() + q2t.mean().item()) / 2, [loss1.item(), loss2.item()]
+        return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
 
     '''
     def act(self, state):
@@ -221,37 +227,29 @@ class DDQN_Agent(Agent):
             return torch.argmax(q).item()
     '''
         
-    def act(self, state, height, show_stats=True):
+    def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
-        if self.counter == self.warmup:
-            print("Warmup done")
         
         self.net.eval()
-        state = state.to(self.device)
         
-        if np.random.rand() < 0.5:
-            q = self.net(state, 1)
-        else:
-            q = self.net(state, 2)
+        q1 = self.net(state, 1)
+        q2 = self.net(state, 2)
+        q = q1 if np.random.rand() < 0.5 else q2
                 
         if np.random.rand() < self.epsilon:
             action = np.random.randint(self.action_space)
             color = 'g'
         else: 
-            q_ = None
-            if self.h > height:
-                q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
-            self.h = height
-
-            if q_ is not None:
-                action = torch.argmax(q_).item()
-            else:
-                action = torch.argmax(q).item()
+            action = torch.argmax(q).item()
+            if height < self.h:
+                action = self.mask_jumps(action)
             color = 'r' 
 
+        self.h = height
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
+            plot_stats(q1.squeeze().detach().cpu().numpy(), action, color, ax=ax, q2=q2.squeeze().detach().cpu().numpy())
             
         return action
         
@@ -264,7 +262,6 @@ class DDQN_Agent(Agent):
             return None, None
 
         state, next_state, action, reward, done = self.sample_from_memory()
-
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
         return mean_q, loss 
@@ -313,9 +310,6 @@ class AC_Agent(Agent):
     def act(self, state, height, show_stats=True):
         self.counter += 1
         color = 'r'
-        if self.counter == self.warmup:
-            print("Warmup done")
-        
         self.net.eval()
         state = state.to(self.device)
         q = self.net(state, 1)
@@ -403,7 +397,6 @@ class DUELING_Agent(Agent):
 
         self.net.train()
 
-        # Select best action from both networks
         q1 = self.net(next_state, 1)
         action1 = torch.argmax(q1, dim=1)
         q2 = self.net(next_state, 2)
@@ -414,9 +407,6 @@ class DUELING_Agent(Agent):
 
         q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
         q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
-
-        # print(f"Q1 from network 1: {q1.mean().item()}")
-        # print(f"Q2 from network 2: {q2.mean().item()}")
 
         loss1 = self.loss(target2, q1t)
         loss2 = self.loss(target1, q2t) 
@@ -436,21 +426,31 @@ class DUELING_Agent(Agent):
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
 
 
-    def act(self, state):
+    def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
+        
+        self.net.eval()
+        
+        q1 = self.net(state, 1)
+        q2 = self.net(state, 2)
+        q = q1 if np.random.rand() < 0.5 else q2
+                
+        if np.random.rand() < self.epsilon:
+            action = np.random.randint(self.action_space)
+            color = 'g'
+        else: 
+            action = torch.argmax(q).item()
+            if height < self.h:
+                action = self.mask_jumps(action)
+            color = 'r' 
+
+        self.h = height
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
-        if self.counter == self.warmup:
-            print("Warmup done")
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(self.action_space)
-        else:
-            self.net.eval()
-            state = state.to(self.device)
-            if np.random.rand() < 0.5:
-                return self.net(state, 1).argmax().item()
-            else:
-                return self.net(state, 2).argmax().item()
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            plot_stats(q1.squeeze().detach().cpu().numpy(), action, color, ax=ax, q2=q2.squeeze().detach().cpu().numpy())
+            
+        return action
         
 
     def learn(self):
@@ -461,25 +461,38 @@ class DUELING_Agent(Agent):
             return None, None
 
         state, next_state, action, reward, done = self.sample_from_memory()
-
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
         return mean_q, loss 
     
 
 
-def plot_stats(q, action, color, v=None):
-    plt.clf()
-    bars = plt.bar(range(len(q)), q, width=0.4)
-    bars[action].set_color(color)
-    if v is not None:
-        plt.bar(range(len(v)), v, width=0.4, color="g")
-    plt.xlabel('Actions')
-    plt.ylabel('Q-values')
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.001)
-    plt.show(block=False)
+def plot_stats(q, action, color, v=None, ax=None, q2=None):
+    if ax is not None and q2 is not None:
+        ax1, ax2 = ax
+        ax1.clear()
+        ax2.clear()
+        bars1 = ax1.bar(range(len(q)), q, width=0.4)
+        bars1[action].set_color(color)
+        ax1.set_xlabel('Actions')
+        ax1.set_ylabel('Q-values')
+        bars2 = ax2.bar(range(len(q2)), q2, width=0.4)
+        bars2[action].set_color(color)
+        ax2.set_xlabel('Actions')
+        ax2.set_ylabel('Q-values')
+        plt.draw()
+        plt.pause(0.001)
+        plt.show(block=False)
+    else:
+        plt.clf()
+        bars = plt.bar(range(len(q)), q, width=0.4)
+        bars[action].set_color(color)
+        plt.xlabel('Actions')
+        plt.ylabel('Q-values')
+        plt.tight_layout()
+        plt.draw()
+        plt.pause(0.001)
+        plt.show(block=False)
 
 
 
