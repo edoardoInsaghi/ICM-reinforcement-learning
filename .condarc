@@ -1,6 +1,0 @@
-channels:
-  - conda-forge
-  - nvidia
-  - rapidsai
-  - defaults
-channel_priority: flexible
