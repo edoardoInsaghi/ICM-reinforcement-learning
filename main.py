@@ -28,8 +28,8 @@ env = FrameStack(env, 4)
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 
-player = FDQN_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025)
-episodes = 1000
+player = FDQN_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025, ckpt='fdqn.pth')
+episodes = 1000000
 logger = Logger()
 # rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
 
@@ -46,7 +46,7 @@ for episode in range(1, episodes+1):
     
     while True:
         
-        action = player.act(state, height)
+        action = player.act(state, height, show_stats=True)
         
         next_state, reward, done, info = env.step(action)
         next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
@@ -66,7 +66,7 @@ for episode in range(1, episodes+1):
         state = next_state
 
     if episode % 5 == 0:
-        torch.save(player.net.state_dict(), "dueling.pth")
+        torch.save(player.net.state_dict(), "fdqnlocal.pth")
 
     if player.counter > player.warmup:
         logger.log_episode()

@@ -12,7 +12,7 @@ class Agent():
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None):
         
         self.counter = 0        
         self.memory = []
@@ -71,13 +71,15 @@ class FDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, ckpt=None):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
 
         self.sync_every = sync_every
         self.net = Net(4, action_space, size, "fdqn").to(device)
+        if ckpt is not None:
+            self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.h = 0
 
@@ -117,8 +119,6 @@ class FDQN_Agent(Agent):
         if self.h > height:
             q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
         self.h = height
-        if self.counter == self.warmup:
-            print("Warmup done")
         if np.random.rand() < self.epsilon:
             action = np.random.randint(self.action_space)
             color = 'g'
