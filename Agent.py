@@ -169,6 +169,7 @@ class DDQN_Agent(Agent):
         self.net = Net(4, action_space, size, "ddqn").to(device)
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
+        self.h = 0
         
 
     def update_q(self, state, next_state, action, reward):
@@ -194,13 +195,14 @@ class DDQN_Agent(Agent):
 
         loss1.backward(retain_graph=True)
         loss2.backward()
+        torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
 
         self.optimizer1.step()
         self.optimizer2.step()
 
         return (q1t.mean().item() + q2t.mean().item()) / 2, [loss1.item(), loss2.item()]
 
-
+    '''
     def act(self, state):
         self.counter += 1
         if self.counter == self.warmup:
@@ -217,6 +219,41 @@ class DDQN_Agent(Agent):
 
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             return torch.argmax(q).item()
+    '''
+        
+    def act(self, state, height, show_stats=True):
+        self.counter += 1
+        if self.counter == self.warmup:
+            print("Warmup done")
+        
+        self.net.eval()
+        state = state.to(self.device)
+        
+        if np.random.rand() < 0.5:
+            q = self.net(state, 1)
+        else:
+            q = self.net(state, 2)
+                
+        if np.random.rand() < self.epsilon:
+            action = np.random.randint(self.action_space)
+            color = 'g'
+        else: 
+            q_ = None
+            if self.h > height:
+                q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
+            self.h = height
+
+            if q_ is not None:
+                action = torch.argmax(q_).item()
+            else:
+                action = torch.argmax(q).item()
+            color = 'r' 
+
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
+            
+        return action
         
 
     def learn(self):
@@ -252,8 +289,9 @@ class AC_Agent(Agent):
         self.min_temperature = min_temperature
         self.temperature_decay = temperature_decay
         self.beta = beta
-
-    
+        self.h = 0
+        
+    '''
     def act(self, state, show_stats=True):
         self.counter += 1
         color = 'r'
@@ -265,6 +303,34 @@ class AC_Agent(Agent):
         q = self.net(state, 1)
         p = torch.softmax(q, dim=1)
         action = torch.multinomial(p, 1).item()
+
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
+
+        return action
+    '''
+    
+    def act(self, state, height, show_stats=True):
+        self.counter += 1
+        color = 'r'
+        if self.counter == self.warmup:
+            print("Warmup done")
+        
+        self.net.eval()
+        state = state.to(self.device)
+        q = self.net(state, 1)
+        q_ = None
+        if self.h > height:
+            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
+        self.h = height
+        
+        if q_ is not None:
+            p = torch.softmax(q_, dim=1)
+        else:
+            p = torch.softmax(q, dim=1)
+             
+        action = torch.multinomial(p, 1).item()
+        color = 'r'
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
             plot_stats(q.squeeze().detach().cpu().numpy(), action, color)

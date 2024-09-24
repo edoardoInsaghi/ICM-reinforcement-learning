@@ -68,6 +68,15 @@ class Net(nn.Module):
         if algo == "fdql":
             for p in self.fc2.parameters():
                 p.requires_grad = False
+        
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
 
         
     def forward(self, x, model=1):
@@ -108,6 +117,15 @@ class Reverse_Dynamics_Module(nn.Module):
             nn.ReLU(),
             nn.Linear(256, action_space)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+
 
     def forward(self, state, next_state):
 
