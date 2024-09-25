@@ -43,13 +43,15 @@ warmup = 1000
 epsilon = 1
 epsilon_decay = 0.999
 lr = 0.00025
+num_steps = 50
 
 # Start from pretrained, learn state representations, algorithm
 ckpt = None
 learn_states = False
-algo = 'fdql'
+#algo = 'fdql'
 # algo = 'ddqn'
 # algo = 'dueling'
+algo = 'ac'
 
 if algo == 'fdql':
     player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
@@ -57,6 +59,8 @@ elif algo == 'ddqn':
     player = DDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
 elif algo =='dueling':
     player = DUELING_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
+elif algo == 'ac':
+    player = AC_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay= epsilon_decay, lr=lr, ckpt=ckpt)
 
 
 episodes = 10000
@@ -84,32 +88,73 @@ for episode in range(1, episodes+1):
     state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
     
     while True:
-        
-        action = player.act(state, height, show_stats=not cluster, ax=ax)
-        
-        next_state, reward, done, info = env.step(action)
-        next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
-        distance = info['x_pos']
-        height = info['y_pos']
+        if algo == "ac":
+            log_policies = []
+            values = []
+            rewards = []
+            entropies = []
+            curr_step = 0
+            
+            for _ in range(num_steps):
+                curr_step += 1
+                
+                action, logits = player.act2(state, height)
+                value = player.net(state, 2)
+                policy = torch.softmax(logits, dim=1)
+                log_policy = torch.log_softmax(logits, dim=1)
+                entropy = -(policy * log_policy).sum(1, keepdim=True)
+                
+                state, reward, done, info = env.step(action)
+                distance = info['x_pos']
+                height = info['y_pos']
+                state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
 
-        player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
+                if done:
+                    curr_step = 0
+                    break
+                
+                env.render()
+                
+                values.append(value)
+                log_policies.append(log_policy[0, action])
+                rewards.append(reward)
+                entropies.append(entropy)
+                
+            v, loss = player.update(log_policies=log_policies, rewards=rewards, values=values, entropies=entropies)
+            logger.log_step(reward, loss.cpu().detach().numpy(), v.cpu().detach().numpy(), distance)
+            
+            #if player.counter > player.warmup:
+                #logger.log_episode()
+                #logger.print_last_episode()
+                    
+    
+            
+        else:
+            action = player.act(state, height, show_stats=not cluster, ax=ax)
+            
+            next_state, reward, done, info = env.step(action)
+            next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
+            distance = info['x_pos']
+            height = info['y_pos']
 
-        q, loss = player.learn()
-        logger.log_step(reward, loss, q, distance)
+            player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
 
-        if done:
-            break
-        
-        if not cluster:
-            env.render()
+            q, loss = player.learn()
+            logger.log_step(reward, loss, q, distance)
 
-        state = next_state
+            if done:
+                break
+            
+            if not cluster:
+                env.render()
 
-    if episode % 5 == 0 and save:
-        torch.save(player.net.state_dict(), "fdql_learn_states.pth")
+            state = next_state
 
-    if player.counter > player.warmup:
-        logger.log_episode()
-        logger.print_last_episode()
+        if episode % 5 == 0 and save:
+            torch.save(player.net.state_dict(), "fdql_learn_states.pth")
+
+        if player.counter > player.warmup:
+            logger.log_episode()
+            logger.print_last_episode()
 
 env.close()

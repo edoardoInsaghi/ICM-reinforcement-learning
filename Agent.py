@@ -236,7 +236,7 @@ class DDQN_Agent(Agent):
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             return torch.argmax(q).item()
     '''
-        
+    
     def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
         
@@ -272,9 +272,14 @@ class DDQN_Agent(Agent):
             return None, None
 
         state, next_state, action, reward, done = self.sample_from_memory()
+        
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
         return mean_q, loss 
+    
+    
+        
+        
     
 
 
@@ -282,10 +287,10 @@ class DDQN_Agent(Agent):
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025, beta=0.01,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, temperature=1.0, min_temperature=0.1, temperature_decay=0.999997):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, temperature=1.0, min_temperature=0.1, temperature_decay=0.999997, ckpt=None):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
         
         self.net = Net(4, action_space, size, "ac").to(device)
         self.optimizer1 = optim.Adam(self.net.parameters(), lr=lr)
@@ -341,7 +346,53 @@ class AC_Agent(Agent):
 
         return action
     
+    
+    def act2(self, state, height, show_stats=True):
+        self.counter += 1
+        color = 'r'
+        self.net.eval()
+        state = state.to(self.device)
+        q = self.net(state, 1)
+        q_ = None
+        if self.h > height:
+            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
+        self.h = height
+        
+        if q_ is not None:
+            p = torch.softmax(q_, dim=1)
+        else:
+            p = torch.softmax(q, dim=1)
+             
+        action = torch.multinomial(p, 1).item()
+        color = 'r'
 
+        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
+
+        return action, q
+    
+    
+
+    def update(self, values, log_policies, rewards, entropies):
+        actor_loss = 0
+        critic_loss = 0
+        entropy_loss = 0
+        next_value = values[-1]
+
+        for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[-2::-1]:
+            advantage = reward + self.gamma * next_value.detach() - value.detach()
+            next_value = value
+            actor_loss = actor_loss + log_policy * advantage
+            critic_loss = critic_loss + (advantage) ** 2 
+            entropy_loss = entropy_loss + entropy
+
+        total_loss = -actor_loss + critic_loss - self.beta * entropy_loss
+        self.optimizer1.zero_grad()
+        total_loss.backward()
+        
+        return next_value, total_loss
+            
+ 
     def learn(self):
         if self.counter < self.warmup:
             return None, None
