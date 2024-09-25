@@ -20,36 +20,19 @@ class ConvBlock(nn.Module):
 
 class Net(nn.Module):
 
-    def __init__(self, channels_in, action_space, size=84, algo="fdql"):
+    def __init__(self, channels_in, action_space, size=84, algo="fdql", learn_states=False):
         super(Net, self).__init__()
 
         self.algo = algo
         
-        self.blocks = nn.ModuleList(
-            [ConvBlock(channels_in, 32, kernel_size=8, stride=4)] + 
-            [ConvBlock(32, 64, kernel_size=4, stride=2)] + 
-            [ConvBlock(64, 64, stride=1)]
-        )
+        if not learn_states:
+            self.blocks = nn.ModuleList(
+                [ConvBlock(channels_in, 32, kernel_size=8, stride=4)] + 
+                [ConvBlock(32, 64, kernel_size=4, stride=2)] + 
+                [ConvBlock(64, 64, stride=1)]
+            )
 
-        self.fc1 = nn.Sequential (
-            nn.Flatten(),
-            nn.Linear(3136, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, action_space)
-        )
-
-        self.fc2 = nn.Sequential (
-            nn.Flatten(),
-            nn.Linear(3136, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
-        )
-
-        if algo == "dueling":
-
-            self.fc1_2 = nn.Sequential (
+            self.fc1 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(3136, 512),
                 nn.BatchNorm1d(512),
@@ -57,19 +40,75 @@ class Net(nn.Module):
                 nn.Linear(512, action_space)
             )
 
-            self.fc2_2 = nn.Sequential (
+            self.fc2 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(3136, 512),
                 nn.BatchNorm1d(512),
                 nn.ReLU(),
-                nn.Linear(512, 1)
+                nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
             )
+
+            if algo == "dueling":
+
+                self.fc1_2 = nn.Sequential (
+                    nn.Flatten(),
+                    nn.Linear(3136, 512),
+                    nn.BatchNorm1d(512),
+                    nn.ReLU(),
+                    nn.Linear(512, action_space)
+                )
+
+                self.fc2_2 = nn.Sequential (
+                    nn.Flatten(),
+                    nn.Linear(3136, 512),
+                    nn.BatchNorm1d(512),
+                    nn.ReLU(),
+                    nn.Linear(512, 1)
+                )
+
+        else:
+            self.RDM = Reverse_Dynamics_Module(size=size, action_space=action_space)
+
+            self.fc1 = nn.Sequential (
+                nn.Flatten(),
+                nn.Linear(288, 512),
+                nn.BatchNorm1d(512),
+                nn.ReLU(),
+                nn.Linear(512, action_space)
+            )
+
+            self.fc2 = nn.Sequential (
+                nn.Flatten(),
+                nn.Linear(288, 512),
+                nn.BatchNorm1d(512),
+                nn.ReLU(),
+                nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
+            )
+
+            if algo == "dueling":
+
+                self.fc1_2 = nn.Sequential (
+                    nn.Flatten(),
+                    nn.Linear(288, 512),
+                    nn.BatchNorm1d(512),
+                    nn.ReLU(),
+                    nn.Linear(512, action_space)
+                )
+
+                self.fc2_2 = nn.Sequential (
+                    nn.Flatten(),
+                    nn.Linear(288, 512),
+                    nn.BatchNorm1d(512),
+                    nn.ReLU(),
+                    nn.Linear(512, 1)
+                )
 
         if algo == "fdql":
             for p in self.fc2.parameters():
                 p.requires_grad = False
         
         self._initialize_weights()
+
 
     def _initialize_weights(self):
         for module in self.modules():
@@ -81,8 +120,11 @@ class Net(nn.Module):
         
     def forward(self, x, model=1):
 
-        for block in self.blocks:
-            x = block(x)
+        if hasattr(self, "RDM"):
+            x = self.RDM.get_latent_state(x)
+        else:
+            for block in self.blocks:
+                x = block(x)
 
         if self.algo == "dueling":
             if model == 1:
@@ -97,27 +139,29 @@ class Net(nn.Module):
         
 
 
+
+
 class Reverse_Dynamics_Module(nn.Module):
 
-    def __init__(self, size=84, action_space=12, device=torch.device('cpu')):
+    def __init__(self, size=84, action_space=12):
         super(Reverse_Dynamics_Module, self).__init__()
         self.size = size
         self.action_space = action_space
-        self.device = device
 
         self.blocks = nn.ModuleList(
             [ConvBlock(4, 32, stride=2, padding=1)] + 
             [ConvBlock(32, 32, stride=2, padding=1)] + 
             [ConvBlock(32, 32, stride=2, padding=1)] +
-            [ConvBlock(32, 32, stride=2, padding=1)]
+            [ConvBlock(32, 8, stride=2, padding=1)]
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(32*6*6*2, 256),
+            nn.Linear(8*6*6*2, 256),
             nn.ReLU(),
             nn.Linear(256, action_space)
         )
         self._initialize_weights()
+
 
     def _initialize_weights(self):
         for module in self.modules():
@@ -128,17 +172,19 @@ class Reverse_Dynamics_Module(nn.Module):
 
 
     def forward(self, state, next_state):
-
-        x1 = torch.tensor(state, dtype=torch.float32).to(self.device)
-        x2 = torch.tensor(next_state, dtype=torch.float32).to(self.device).unsqueeze(0)
+        B, C, H, W = state.shape
         for block in self.blocks:
-              x1 = block(x1)
-              x2 = block(x2)
+              state = block(state)
+              next_state = block(next_state)
 
-        x = torch.cat((x1.view(1,-1), x2.view(1,-1)), dim=1)
+        x = torch.cat((state.view(B,-1), state.view(B,-1)), dim=1)
         return self.fc(x)
         
-
+    @torch.no_grad()
     def get_latent_state(self, state):
+        B, C, H, W = state.shape
         self.eval()
-        return self.blocks(state).Flatten()
+        for block in self.blocks:
+            state = block(state)
+        return state.view(B, -1)
+        

@@ -31,10 +31,10 @@ env = JoypadSpace(env, SIMPLE_MOVEMENT)
 cluster = True
 save = True
 
-player = DUELING_Agent(7, batch_size=32, device=device, warmup=500, epsilon=1, epsilon_decay=0.999, lr=0.00025)#, ckpt='fdqn.pth')
+player = DUELING_Agent(7, batch_size=32, device=device, warmup=500, epsilon=0.2, epsilon_decay=0.999, lr=0.00025, ckpt=None, learn_states=True)
 episodes = 1000000
 logger = Logger()
-# rdm = Reverse_Dynamics_Module(action_space=7, device=device).to(device)
+rdm = Reverse_Dynamics_Module(action_space=7).to(device)
 
 plt.ion()
 two = True # Set True if function returns two q values
@@ -77,7 +77,7 @@ for episode in range(1, episodes+1):
         state = next_state
 
     if episode % 5 == 0 and save:
-        torch.save(player.net.state_dict(), "ddqn.pth")
+        torch.save(player.net.state_dict(), "ddqn_learn_states.pth")
 
     if player.counter > player.warmup:
         logger.log_episode()

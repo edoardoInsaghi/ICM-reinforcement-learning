@@ -12,7 +12,7 @@ class Agent():
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
         
         self.counter = 0        
         self.memory = []
@@ -76,17 +76,18 @@ class FDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, ckpt=None):
+                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, ckpt=None, learn_states=False):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
 
         self.sync_every = sync_every
-        self.net = Net(4, action_space, size, "fdqn").to(device)
+        self.net = Net(4, action_space, size, "fdqn", learn_states).to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.h = 0
+        self.cross_loss = nn.CrossEntropyLoss()
 
 
     def td_estimate(self, state, action):
@@ -103,9 +104,14 @@ class FDQN_Agent(Agent):
         return reward + self.gamma * q_target
 
 
-    def update_q_online(self, td_estimate, td_target):
+    def update_q_online(self, td_estimate, td_target, state=None, next_state=None, action=None):
         self.net.train()
-        loss = self.loss(td_estimate, td_target)
+        if state is not None and next_state is not None and action is not None:
+            ahat = self.net.RDM(state, next_state)
+            reverse_loss = self.cross_loss(ahat, action.squeeze(1))
+            loss = self.loss(td_estimate, td_target) + reverse_loss
+        else:
+            loss = self.loss(td_estimate, td_target)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -154,7 +160,7 @@ class FDQN_Agent(Agent):
 
         td_est = self.td_estimate(state, action)
         td_tgt = self.td_target(reward, next_state)
-        loss = self.update_q_online(td_est, td_tgt)
+        loss = self.update_q_online(td_est, td_tgt, state, next_state, action)
 
         return td_est.mean().item(), loss
     
@@ -381,12 +387,15 @@ class AC_Agent(Agent):
 class DUELING_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
             device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9):
+            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9, ckpt=None):
 
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay)
+            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
         
+        self.h = 0
         self.net = Net(4, action_space, size, "dueling").to(device)
+        if ckpt is not None:
+            self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=lr)
         self.scheduler1 = torch.optim.lr_scheduler.CyclicLR(self.optimizer1, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)

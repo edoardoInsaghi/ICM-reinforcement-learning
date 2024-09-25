@@ -1,2 +1,11 @@
-fdqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, sync_every=1000, memory_size=1e4
+dqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4
+duelingdqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4i, lr_scheduler=cyclycal
+duelingdqn2.pth: batch_size=32, e lr=0.000025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4i, lr_scheduler=cyclycal, resuming from duelingdqn
 
+todo:
+        * ht tuning (lr, scheduler)
+        * learn state representation
+        * wtf is wrong with ac
+        * data, plots, whatever (should know already but fu)
+        * ICM
+        * importance sampling for memory batches
