@@ -1,9 +1,13 @@
 import numpy as np
 
 class Logger():
-    def __init__(self, round=5):
+    def __init__(self, round=5, filename=None):
         
         self.round = round
+        self.filename = filename
+        if filename is not None:
+            with open(filename, 'w') as f:
+                f.write(f"Rewards,Lengths,Loss1,Loss2,Q1,Q2,Best_Distances\n")
 
         self.rewards = []
         self.avg_rewards = []
@@ -50,6 +54,10 @@ class Logger():
         assert n > 0
         print(f"Episode {n}: Total Rewards: {self.rewards[-1]}, Length of the episode: {self.lengths[-1]}, Avg Rewards: {self.avg_rewards[-1]}")  
         print(f"             Avg Loss: {self.losses[-1]}, Avg Q: {self.q_values[-1]}, Best Distance: {self.best_distances[-1]}")
+
+        if self.filename is not None:
+            with open(self.filename, 'a') as f:
+                f.write(f"{self.rewards[-1]},{self.lengths[-1]},{self.losses[-1][0]},{self.losses[-1][1]},{self.q_values[-1][0]},{self.q_values[-1][1]},{self.best_distances[-1]}\n")
 
 
     def reset(self):

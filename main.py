@@ -22,19 +22,48 @@ else:
     print('Using device CPU')
 
 w = 84
+movement = SIMPLE_MOVEMENT
 env = gym_super_mario_bros.make('SuperMarioBros-v0')
 env = gym.wrappers.ResizeObservation(env, (w, w)) 
 env = GrayScaleObservation(env)     
 env = FrameStack(env, 4) 
-env = JoypadSpace(env, SIMPLE_MOVEMENT)
+env = JoypadSpace(env, movement)
 
-cluster = True
-save = True
+cluster = False
+save = False
 
-player = DUELING_Agent(7, batch_size=32, device=device, warmup=500, epsilon=0.2, epsilon_decay=0.999, lr=0.00025, ckpt=None, learn_states=True)
-episodes = 1000000
-logger = Logger()
-rdm = Reverse_Dynamics_Module(action_space=7).to(device)
+if movement == COMPLEX_MOVEMENT:
+    action_space = 12
+else:
+    action_space = 7
+
+# Hyperparameters
+batch_size = 32
+warmup = 1000
+epsilon = 1
+epsilon_decay = 0.999
+lr = 0.00025
+
+# Start from pretrained, learn state representations, algorithm
+ckpt = None
+learn_states = False
+algo = 'fdql'
+# algo = 'ddqn'
+# algo = 'dueling'
+
+if algo == 'fdql':
+    player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
+elif algo == 'ddqn':
+    player = DDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
+elif algo =='dueling':
+    player = DUELING_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
+
+
+episodes = 10000
+# filename = "fdql_learn_states.txt"
+filename = None
+logger = Logger(5, filename)
+
 
 plt.ion()
 two = True # Set True if function returns two q values
@@ -45,12 +74,12 @@ else:
     plt.show()
     ax, show_stats = None, False
 
-y1 = 0
-y2 = 0
-height = 0
+
 
 for episode in range(1, episodes+1):
 
+    distance = 0
+    height = 0
     state = env.reset()
     state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
     
@@ -60,7 +89,6 @@ for episode in range(1, episodes+1):
         
         next_state, reward, done, info = env.step(action)
         next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
-        next_state = next_state / 255.0 
         distance = info['x_pos']
         height = info['y_pos']
 
@@ -74,10 +102,11 @@ for episode in range(1, episodes+1):
         
         if not cluster:
             env.render()
+
         state = next_state
 
     if episode % 5 == 0 and save:
-        torch.save(player.net.state_dict(), "ddqn_learn_states.pth")
+        torch.save(player.net.state_dict(), "fdql_learn_states.pth")
 
     if player.counter > player.warmup:
         logger.log_episode()

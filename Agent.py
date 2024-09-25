@@ -18,6 +18,7 @@ class Agent():
         self.memory = []
         self.max_memory = max_memory   
         self.action_space = action_space
+        self.learn_states = learn_states
 
         self.gamma = gamma # Reward Discount
         self.epsilon = epsilon # Exploration Rate
@@ -121,7 +122,7 @@ class FDQN_Agent(Agent):
     def update_target(self):
         self.net.fc2.load_state_dict(self.net.fc1.state_dict())
  
-
+    @torch.no_grad()
     def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
 
@@ -160,9 +161,12 @@ class FDQN_Agent(Agent):
 
         td_est = self.td_estimate(state, action)
         td_tgt = self.td_target(reward, next_state)
-        loss = self.update_q_online(td_est, td_tgt, state, next_state, action)
+        if self.learn_states:
+            loss = self.update_q_online(td_est, td_tgt, state, next_state, action)
+        else:
+            loss = self.update_q_online(td_est, td_tgt)
 
-        return td_est.mean().item(), loss
+        return [td_est.mean().item(), None], [loss, None]
     
 
 
