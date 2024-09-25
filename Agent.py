@@ -71,6 +71,10 @@ class Agent():
     def learn(self):
         pass
 
+    @abstractmethod
+    def plot_stats(self, q, action, color, v=None, ax=None):
+        pass
+
 
 
 class FDQN_Agent(Agent):
@@ -82,6 +86,7 @@ class FDQN_Agent(Agent):
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
 
+        self.algorithm = "fdqn"
         self.sync_every = sync_every
         self.net = Net(4, action_space, size, "fdqn", learn_states).to(device)
         if ckpt is not None:
@@ -142,7 +147,7 @@ class FDQN_Agent(Agent):
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
+            self.plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
 
         return action
         
@@ -169,17 +174,30 @@ class FDQN_Agent(Agent):
         return [td_est.mean().item(), None], [loss, None]
     
 
+    def plot_stats(self, q, action, color, v=None, ax=None):
+        plt.clf()
+        bars = plt.bar(range(len(q)), q, width=0.4)
+        bars[action].set_color(color)
+        plt.xlabel('Actions')
+        plt.ylabel('Q-values')
+        plt.tight_layout()
+        plt.draw()
+        plt.pause(0.001)
+        plt.show(block=False)        
+    
+
 
 class DDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None):
+                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
     
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
+                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
         
 
+        self.algorithm = "ddqn"
         self.net = Net(4, action_space, size, "ddqn").to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
@@ -236,7 +254,8 @@ class DDQN_Agent(Agent):
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             return torch.argmax(q).item()
     '''
-        
+
+    @torch.no_grad()    
     def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
         
@@ -259,7 +278,7 @@ class DDQN_Agent(Agent):
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q1.squeeze().detach().cpu().numpy(), action, color, ax=ax, q2=q2.squeeze().detach().cpu().numpy())
+            self.plot_stats([q1.squeeze().detach().cpu().numpy(), q2.squeeze().detach().cpu().numpy()], action, color, ax=ax)
             
         return action
         
@@ -274,7 +293,25 @@ class DDQN_Agent(Agent):
         state, next_state, action, reward, done = self.sample_from_memory()
         mean_q, loss = self.update_q(state, next_state, action, reward)
 
-        return mean_q, loss 
+        return mean_q, loss
+    
+
+    def plot_stats(self, q, action, color, v=None, ax=None):
+        assert ax is not None
+        q1, q2 = q
+        ax1, ax2 = ax
+        ax1.clear()
+        ax2.clear()
+        bars1 = ax1.bar(range(len(q1)), q1, width=0.4)
+        bars1[action].set_color(color)
+        ax1.set_xlabel('Actions')
+        ax1.set_ylabel('Q-values')
+        bars2 = ax2.bar(range(len(q2)), q2, width=0.4)
+        bars2[action].set_color(color)
+        ax2.set_xlabel('Actions')
+        plt.draw()
+        plt.pause(0.001)
+        plt.show(block=False)
     
 
 
@@ -391,12 +428,14 @@ class AC_Agent(Agent):
 class DUELING_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
             device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9, ckpt=None):
+            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9, ckpt=None, learn_states=False):
 
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
+            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
         
+        self.algorithm = "dueling"
         self.h = 0
+        self.values = np.empty((0, 2))
         self.net = Net(4, action_space, size, "dueling").to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
@@ -438,10 +477,9 @@ class DUELING_Agent(Agent):
 
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
 
-
+    @torch.no_grad()
     def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
-        
         self.net.eval()
         
         q1 = self.net(state, 1)
@@ -461,7 +499,11 @@ class DUELING_Agent(Agent):
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q1.squeeze().detach().cpu().numpy(), action, color, ax=ax, q2=q2.squeeze().detach().cpu().numpy())
+            v1, v2 = self.net.get_value(state)
+            ad1, ad2 = self.net.get_adv(state)
+            value = np.array([v1.squeeze().detach().cpu().numpy(), v2.squeeze().detach().cpu().numpy()])
+            ad = np.array([ad1.squeeze().detach().cpu().numpy(), ad2.squeeze().detach().cpu().numpy()])
+            self.plot_stats(ad, action, color, value, ax=ax)
             
         return action
         
@@ -479,35 +521,29 @@ class DUELING_Agent(Agent):
         return mean_q, loss 
     
 
-
-def plot_stats(q, action, color, v=None, ax=None, q2=None):
-    if ax is not None and q2 is not None:
-        ax1, ax2 = ax
+    def plot_stats(self, q, action, color, v, ax):
+        ax1, ax2, ax3 = ax
+        q1, q2 = q
+        self.values = np.append(self.values, v.reshape(1,2), axis=0)
+        if len(self.values) > 100:
+            self.values = self.values[1:]
+        v1 = self.values[:,0]
+        v2 = self.values[:,1]   
         ax1.clear()
         ax2.clear()
-        bars1 = ax1.bar(range(len(q)), q, width=0.4)
+        ax3.clear()
+        bars1 = ax1.bar(range(len(q1)), q1, width=0.4)
         bars1[action].set_color(color)
         ax1.set_xlabel('Actions')
         ax1.set_ylabel('Q-values')
         bars2 = ax2.bar(range(len(q2)), q2, width=0.4)
         bars2[action].set_color(color)
         ax2.set_xlabel('Actions')
-        ax2.set_ylabel('Q-values')
+        ax3.plot(v1, label="Value1")
+        ax3.plot(v2, label="Value2")
         plt.draw()
         plt.pause(0.001)
         plt.show(block=False)
-    else:
-        plt.clf()
-        bars = plt.bar(range(len(q)), q, width=0.4)
-        bars[action].set_color(color)
-        plt.xlabel('Actions')
-        plt.ylabel('Q-values')
-        plt.tight_layout()
-        plt.draw()
-        plt.pause(0.001)
-        plt.show(block=False)
-
-
 
 
 """

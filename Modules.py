@@ -137,6 +137,30 @@ class Net(nn.Module):
         else:
             return self.fc2(x)
         
+    @torch.no_grad()
+    def get_value(self, x):
+        assert self.algo == "dueling"
+        self.eval()
+        
+        if hasattr(self, "RDM"):
+            x = self.RDM.get_latent_state(x)
+        else:
+            for block in self.blocks:
+                x = block(x)
+
+        return [self.fc2(x), self.fc2_2(x)]
+    
+    @torch.no_grad()
+    def get_adv(self, x):
+        assert self.algo == "dueling"
+        self.eval()
+        if hasattr(self, "RDM"):
+            x = self.RDM.get_latent_state(x)
+        else:
+            for block in self.blocks:
+                x = block(x)
+
+        return [self.fc1(x) - self.fc1(x).mean(), self.fc1_2(x) - self.fc1_2(x).mean()]
 
 
 

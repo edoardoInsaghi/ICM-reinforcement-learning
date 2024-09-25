@@ -39,19 +39,19 @@ else:
 
 # Hyperparameters
 batch_size = 32
-warmup = 1000
-epsilon = 1
+warmup = 100
+epsilon = 0.2
 epsilon_decay = 0.999
 lr = 0.00025
 
 # Start from pretrained, learn state representations, algorithm
 ckpt = None
 learn_states = False
-algo = 'fdql'
+# algo = 'fdqn'
 # algo = 'ddqn'
-# algo = 'dueling'
+algo = 'dueling'
 
-if algo == 'fdql':
+if algo == 'fdqn':
     player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
 elif algo == 'ddqn':
     player = DDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
@@ -60,20 +60,25 @@ elif algo =='dueling':
 
 
 episodes = 10000
-# filename = "fdql_learn_states.txt"
+# filename = "fdqn_learn_states.txt"
 filename = None
 logger = Logger(5, filename)
 
 
 plt.ion()
 two = True # Set True if function returns two q values
-if two:
+if algo == "ddqn":
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax = [ax1, ax2]
-else: 
+elif algo == "fdqn": 
     plt.show()
-    ax, show_stats = None, False
-
+    ax = None
+elif algo == "dueling":
+    fig = plt.figure(figsize=(10, 10))
+    ax1 = plt.subplot2grid((2, 2), (0, 0))
+    ax2 = plt.subplot2grid((2, 2), (0, 1))
+    ax3 = plt.subplot2grid((2, 2), (1, 0), colspan=2) 
+    ax = [ax1, ax2, ax3]
 
 
 for episode in range(1, episodes+1):
