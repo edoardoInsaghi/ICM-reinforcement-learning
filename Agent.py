@@ -103,11 +103,11 @@ class FDQN_Agent(Agent):
     
 
     @torch.no_grad()
-    def td_target(self, reward, next_state):
+    def td_target(self, reward, next_state, done):
         self.net.eval()
         q_target = self.net(next_state, 2)
         q_target = torch.max(q_target, dim=1).values
-        return reward + self.gamma * q_target
+        return reward + self.gamma * q_target * ~done
 
 
     def update_q_online(self, td_estimate, td_target, state=None, next_state=None, action=None):
@@ -165,7 +165,7 @@ class FDQN_Agent(Agent):
         state, next_state, action, reward, done = self.sample_from_memory()
 
         td_est = self.td_estimate(state, action)
-        td_tgt = self.td_target(reward, next_state)
+        td_tgt = self.td_target(reward, next_state, done)
         if self.learn_states:
             loss = self.update_q_online(td_est, td_tgt, state, next_state, action)
         else:
@@ -206,7 +206,7 @@ class DDQN_Agent(Agent):
         self.h = 0
         
 
-    def update_q(self, state, next_state, action, reward):
+    def update_q(self, state, next_state, action, reward, done):
         self.net.train()
 
         # Select best action from both networks
@@ -215,8 +215,8 @@ class DDQN_Agent(Agent):
         q2 = self.net(next_state, 2)
         action2 = torch.argmax(q2, dim=1)
 
-        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] + reward
-        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] + reward
+        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] * ~done + reward
+        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] * ~done + reward
 
         q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
         q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
@@ -235,25 +235,7 @@ class DDQN_Agent(Agent):
         self.optimizer2.step()
 
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
-
-    '''
-    def act(self, state):
-        self.counter += 1
-        if self.counter == self.warmup:
-            print("Warmup done")
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(self.action_space)
-        else:
-            self.net.eval()
-            state = state.to(self.device)
-            if np.random.rand() < 0.5:
-                q = self.net(state, 1)
-            else:
-                q = self.net(state, 2)
-
-            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-            return torch.argmax(q).item()
-    '''
+    
 
     @torch.no_grad()    
     def act(self, state, height, show_stats=True, ax=None):
@@ -292,7 +274,7 @@ class DDQN_Agent(Agent):
 
         state, next_state, action, reward, done = self.sample_from_memory()
         
-        mean_q, loss = self.update_q(state, next_state, action, reward)
+        mean_q, loss = self.update_q(state, next_state, action, reward, done)
 
         return mean_q, loss
     
@@ -316,8 +298,6 @@ class DDQN_Agent(Agent):
     
     
         
-
-
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025, beta=0.01,
@@ -336,25 +316,7 @@ class AC_Agent(Agent):
         self.temperature_decay = temperature_decay
         self.beta = beta
         self.h = 0
-        
-    '''
-    def act(self, state, show_stats=True):
-        self.counter += 1
-        color = 'r'
-        if self.counter == self.warmup:
-            print("Warmup done")
-        
-        self.net.eval()
-        state = state.to(self.device)
-        q = self.net(state, 1)
-        p = torch.softmax(q, dim=1)
-        action = torch.multinomial(p, 1).item()
-
-        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
-
-        return action
-    '''
+    
     
     def act(self, state, height, show_stats=True):
         self.counter += 1
@@ -496,7 +458,7 @@ class DUELING_Agent(Agent):
         self.scheduler2 = torch.optim.lr_scheduler.CyclicLR(self.optimizer2, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)
             
 
-    def update_q(self, state, next_state, action, reward):
+    def update_q(self, state, next_state, action, reward, done):
 
         self.net.train()
 
@@ -505,8 +467,8 @@ class DUELING_Agent(Agent):
         q2 = self.net(next_state, 2)
         action2 = torch.argmax(q2, dim=1)
 
-        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] + reward
-        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] + reward
+        target1 = self.gamma * self.net(state, 2)[np.arange(0, self.batch_size), action1] * ~done + reward
+        target2 = self.gamma * self.net(state, 1)[np.arange(0, self.batch_size), action2] * ~done + reward
 
         q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
         q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
@@ -527,6 +489,7 @@ class DUELING_Agent(Agent):
         self.scheduler2.step()
 
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
+
 
     @torch.no_grad()
     def act(self, state, height, show_stats=True, ax=None):
@@ -567,7 +530,7 @@ class DUELING_Agent(Agent):
             return None, None
 
         state, next_state, action, reward, done = self.sample_from_memory()
-        mean_q, loss = self.update_q(state, next_state, action, reward)
+        mean_q, loss = self.update_q(state, next_state, action, reward, done)
 
         return mean_q, loss 
     

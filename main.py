@@ -31,6 +31,7 @@ env = JoypadSpace(env, movement)
 
 cluster = False
 save = False
+savefile = "ddqn.pth"
 
 if movement == COMPLEX_MOVEMENT:
     action_space = 12
@@ -40,18 +41,18 @@ else:
 # Hyperparameters
 batch_size = 32
 warmup = 100
-epsilon = 0.2
+epsilon = 0.9
 epsilon_decay = 0.999
 lr = 0.00025
 num_steps = 50
 
 # Start from pretrained, learn state representations, algorithm
-ckpt = None
+ckpt = "ddqn.pth"
 learn_states = False
-#algo = 'fdql'
-# algo = 'ddqn'
+# algo = 'fdqn'
+algo = 'ddqn'
 # algo = 'dueling'
-algo = 'ac'
+# algo = 'ac'
 
 if algo == 'fdqn':
     player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states)
@@ -64,13 +65,12 @@ elif algo == 'ac':
 
 
 episodes = 10000
-# filename = "fdqn_learn_states.txt"
+# filename = "ddqn.txt"
 filename = None
 logger = Logger(5, filename)
 
 
 plt.ion()
-two = True # Set True if function returns two q values
 if algo == "ddqn":
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax = [ax1, ax2]
@@ -155,11 +155,11 @@ for episode in range(1, episodes+1):
 
             state = next_state
 
-        if episode % 5 == 0 and save:
-            torch.save(player.net.state_dict(), "fdql_learn_states.pth")
+    if episode % 5 == 0 and save:
+        torch.save(player.net.state_dict(), savefile)
 
-        if player.counter > player.warmup:
-            logger.log_episode()
-            logger.print_last_episode()
+    if player.counter > player.warmup:
+        logger.log_episode()
+        logger.print_last_episode()
 
 env.close()
