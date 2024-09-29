@@ -88,7 +88,7 @@ class FDQN_Agent(Agent):
 
         self.algorithm = "fdqn"
         self.sync_every = sync_every
-        self.net = Net(4, action_space, size, "fdqn", learn_states).to(device)
+        self.net = FDQN_NET(4, action_space).to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
@@ -187,6 +187,14 @@ class FDQN_Agent(Agent):
     
 
 
+
+
+
+
+
+
+
+
 class DDQN_Agent(Agent):
 
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
@@ -198,11 +206,10 @@ class DDQN_Agent(Agent):
         
 
         self.algorithm = "ddqn"
-        self.net = Net(4, action_space, size, "ddqn").to(device)
+        self.net = DDQN_NET(4, action_space).to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
-        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}], lr=lr)
-        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
         self.h = 0
         
 
@@ -223,17 +230,15 @@ class DDQN_Agent(Agent):
 
         loss1 = self.loss(target2, q1t)
         loss2 = self.loss(target1, q2t) 
+        loss = loss1 + loss2
 
-        self.optimizer1.zero_grad()
-        self.optimizer2.zero_grad()
+        self.optimizer.zero_grad()
 
         loss1.backward(retain_graph=True)
         loss2.backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
 
-        self.optimizer1.step()
-        self.optimizer2.step()
-
+        self.optimizer.step()
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
     
 
@@ -297,7 +302,7 @@ class DDQN_Agent(Agent):
         plt.show(block=False)
     
     
-        
+"""
 class AC_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025, beta=0.01,
@@ -437,6 +442,11 @@ class AC_Agent(Agent):
     def plot_stats(self, q, action, color, v=None, ax=None):
         pass
 
+"""
+
+
+
+
 
 class DUELING_Agent(Agent):
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
@@ -449,13 +459,11 @@ class DUELING_Agent(Agent):
         self.algorithm = "dueling"
         self.h = 0
         self.values = np.empty((0, 2))
-        self.net = Net(4, action_space, size, "dueling").to(device)
+        self.net = DUELING_Net(4, action_space).to(device)
         if ckpt is not None:
             self.net.load_state_dict(torch.load(ckpt, map_location=device))
         self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
         self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=lr)
-        self.scheduler1 = torch.optim.lr_scheduler.CyclicLR(self.optimizer1, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)
-        self.scheduler2 = torch.optim.lr_scheduler.CyclicLR(self.optimizer2, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, cycle_momentum=False)
             
 
     def update_q(self, state, next_state, action, reward, done):
@@ -484,9 +492,6 @@ class DUELING_Agent(Agent):
 
         self.optimizer1.step()
         self.optimizer2.step()
-
-        self.scheduler1.step()
-        self.scheduler2.step()
 
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
 
@@ -616,3 +621,18 @@ class REINFORCE_Agent(Agent):
 
         return cum_rewards, total_loss
 """
+
+
+
+def visualize_state(state):
+
+    state_np = state.squeeze(0).cpu().numpy()  # Remove batch dimension and move to CPU
+    fig, axs = plt.subplots(1, 4, figsize=(12, 6))
+
+    for i in range(4):
+        axs[i].imshow(state_np[i])
+        axs[i].set_title(f'Frame {i+1}')
+        axs[i].axis('off')
+    
+    plt.tight_layout()
+    plt.show()

@@ -1,6 +1,5 @@
-dqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4
-duelingdqn.pth: batch_size=32, e lr=0.00025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4i, lr_scheduler=cyclycal
-duelingdqn2.pth: batch_size=32, e lr=0.000025, epsilon=1, epsilon_decay=0.999, epsilon_min=0.01, memory_size=1e4i, lr_scheduler=cyclycal, resuming from duelingdqn
+dueling.pth  849626 frames, does not work
+dueling2.pth learn rate /= 10, 833577 additional frames
 
 todo:
         * ht tuning (lr, scheduler)

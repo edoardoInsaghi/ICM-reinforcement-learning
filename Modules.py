@@ -10,12 +10,10 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, kernel_size=3, padding=0):
         super(ConvBlock, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride)
-        self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.bn(self.conv(x)))
-        
+        return self.relu(self.conv(x))
 
 
 class Net(nn.Module):
@@ -35,7 +33,6 @@ class Net(nn.Module):
             self.fc1 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(3136, 512),
-                nn.BatchNorm1d(512),
                 nn.ReLU(),
                 nn.Linear(512, action_space)
             )
@@ -43,7 +40,6 @@ class Net(nn.Module):
             self.fc2 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(3136, 512),
-                nn.BatchNorm1d(512),
                 nn.ReLU(),
                 nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
             )
@@ -53,7 +49,6 @@ class Net(nn.Module):
                 self.fc1_2 = nn.Sequential (
                     nn.Flatten(),
                     nn.Linear(3136, 512),
-                    nn.BatchNorm1d(512),
                     nn.ReLU(),
                     nn.Linear(512, action_space)
                 )
@@ -61,7 +56,6 @@ class Net(nn.Module):
                 self.fc2_2 = nn.Sequential (
                     nn.Flatten(),
                     nn.Linear(3136, 512),
-                    nn.BatchNorm1d(512),
                     nn.ReLU(),
                     nn.Linear(512, 1)
                 )
@@ -72,7 +66,6 @@ class Net(nn.Module):
             self.fc1 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(288, 512),
-                nn.BatchNorm1d(512),
                 nn.ReLU(),
                 nn.Linear(512, action_space)
             )
@@ -80,7 +73,6 @@ class Net(nn.Module):
             self.fc2 = nn.Sequential (
                 nn.Flatten(),
                 nn.Linear(288, 512),
-                nn.BatchNorm1d(512),
                 nn.ReLU(),
                 nn.Linear(512, action_space) if algo != "ac" and algo != "dueling" else nn.Linear(512, 1)
             )
@@ -90,7 +82,6 @@ class Net(nn.Module):
                 self.fc1_2 = nn.Sequential (
                     nn.Flatten(),
                     nn.Linear(288, 512),
-                    nn.BatchNorm1d(512),
                     nn.ReLU(),
                     nn.Linear(512, action_space)
                 )
@@ -98,7 +89,6 @@ class Net(nn.Module):
                 self.fc2_2 = nn.Sequential (
                     nn.Flatten(),
                     nn.Linear(288, 512),
-                    nn.BatchNorm1d(512),
                     nn.ReLU(),
                     nn.Linear(512, 1)
                 )
@@ -212,3 +202,161 @@ class Reverse_Dynamics_Module(nn.Module):
             state = block(state)
         return state.view(B, -1)
         
+
+
+
+
+
+
+
+
+
+class FDQN_NET(nn.Module):
+    def __init__(self, channels_in, action_space, algo="fdqn"):
+        super(FDQN_NET, self).__init__()
+
+        self.backbone = nn.Sequential(
+            nn.Conv2d(channels_in, 32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU()
+        )
+        
+        self.fc1 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self.fc2 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+        
+        for p in self.fc2.parameters():
+            p.requires_grad = False
+
+        self._initialize_weights()
+
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+
+
+    def forward(self, x, model=1):
+        B, C, H, W = x.shape
+        x = self.backbone(x)
+        x = x.view(B, -1)
+        if model == 1:
+            return self.fc1(x)
+        else:
+            return self.fc2(x)
+        
+
+
+
+class DDQN_NET(nn.Module):
+    def __init__(self, channels_in, action_space, algo="ddqn"):
+        super(DDQN_NET, self).__init__()
+
+        self.backbone = nn.Sequential(
+            nn.Conv2d(channels_in, 32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU()
+        )
+        
+        self.fc1 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self.fc2 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self._initialize_weights()
+
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+
+
+    def forward(self, x, model=1):
+        B, C, H, W = x.shape
+        x = self.backbone(x)
+        x = x.view(B, -1)
+        if model == 1:
+            return self.fc1(x)
+        else:
+            return self.fc2(x)
+        
+
+
+
+class DUELING_NET(nn.Module):
+    def __init__(self, channels_in, action_space, algo="dueling"):
+        super(DUELING_NET, self).__init__()
+
+        self.backbone = nn.Sequential(
+            nn.Conv2d(channels_in, 32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU()
+        )
+        
+        self.fc1 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self.fc2 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
+
+        self.fc1_2 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_space)
+        )
+
+        self.fc2_2 = nn.Sequential(
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
+
+        self._initialize_weights()
+
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+
+
+    def forward(self, x, model=1):
+        B, C, H, W = x.shape
+        x = self.backbone(x)
+        x = x.view(B, -1)
+        if model == 1:
+            return self.fc2(x) + self.fc1(x) - self.fc1(x).mean()
+        else:
+            return self.fc2_2(x) + self.fc1_2(x) - self.fc1_2(x).mean()
