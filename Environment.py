@@ -30,8 +30,14 @@ class FrameSkip(gym.Wrapper):
 
 
 
-def new_env(movement, w):
+def new_env(movement_type, w):
     env = gym_super_mario_bros.make('SuperMarioBros-v0')
+    
+    if movement_type == "simple":
+        movement = SIMPLE_MOVEMENT
+    else:
+        movement = COMPLEX_MOVEMENT
+        
     env = FrameSkip(env, 4)
     env = gym.wrappers.ResizeObservation(env, (w, w)) 
     env = GrayScaleObservation(env)     

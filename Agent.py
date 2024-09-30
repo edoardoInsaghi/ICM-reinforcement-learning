@@ -7,28 +7,28 @@ from Modules import *
 from abc import abstractmethod
 from torch.distributions import Categorical
 
-
 class Agent():
-
+    '''
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
-        
+    '''
+    def __init__(self, action_space, args, device):
         self.counter = 0        
         self.memory = []
-        self.max_memory = max_memory   
+        self.max_memory = args.max_memory   
         self.action_space = action_space
-        self.learn_states = learn_states
+        #self.learn_states = learn_states
 
-        self.gamma = gamma # Reward Discount
-        self.epsilon = epsilon # Exploration Rate
-        self.epsilon_min = epsilon_min
-        self.epsilon_decay = epsilon_decay
+        self.gamma = args.gamma # Reward Discount
+        self.epsilon = args.epsilon # Exploration Rate
+        self.epsilon_min = args.epsilon_min
+        self.epsilon_decay = args.epsilon_decay
 
-        self.warmup = warmup
-        self.lr = lr
-        self.learn_every = learn_every
-        self.batch_size = batch_size
+        self.warmup = args.warmup
+        self.lr = args.lr
+        self.learn_every = args.learn_every
+        self.batch_size = args.batch_size
         self.device = device
         self.loss = torch.nn.MSELoss(reduction="mean")
 
@@ -78,20 +78,24 @@ class Agent():
 
 
 class FDQN_Agent(Agent):
-
+    '''
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                  device="cpu", learn_every=4, warmup=1000, lr=0.00025,
                  epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, ckpt=None, learn_states=False):
         
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-
-        self.algorithm = "fdqn"
-        self.sync_every = sync_every
+    '''
+    def __init__(self, action_space, args, device):
+        super().__init__(action_space, args, device)
+        
+        self.sync_every = args.sync_every
         self.net = FDQN_NET(4, action_space).to(device)
-        if ckpt is not None:
-            self.net.load_state_dict(torch.load(ckpt, map_location=device))
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
+        
+        if args.no_ckpt:
+            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+            
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=args.lr)
         self.h = 0
         self.cross_loss = nn.CrossEntropyLoss()
 
@@ -189,27 +193,25 @@ class FDQN_Agent(Agent):
 
 
 
-
-
-
-
-
-
 class DDQN_Agent(Agent):
 
+    '''
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
     
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
                          learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-        
+    ''' 
+    def __init__(self, action_space, args, device):
+        super().__init__(action_space, args, device)
 
-        self.algorithm = "ddqn"
         self.net = DDQN_NET(4, action_space).to(device)
-        if ckpt is not None:
-            self.net.load_state_dict(torch.load(ckpt, map_location=device))
-        self.optimizer = optim.Adam(self.net.parameters(), lr=lr)
+        
+        if args.no_ckpt:
+            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+            
+        self.optimizer = optim.Adam(self.net.parameters(), lr=args.lr)
         self.h = 0
         
 
@@ -301,169 +303,158 @@ class DDQN_Agent(Agent):
         plt.pause(0.001)
         plt.show(block=False)
     
-    
-"""
+
+
+
 class AC_Agent(Agent):
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-                 device="cpu", learn_every=4, warmup=1000, lr=0.00025, beta=0.01,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, temperature=1.0, min_temperature=0.1, temperature_decay=0.999997, ckpt=None):
+    def __init__(self, action_space, args, device="cpu"):
+        super().__init__(action_space, args, device)
         
-        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt)
-        
-        self.net = Net(4, action_space, size, "ac").to(device)
-        self.optimizer1 = optim.Adam(self.net.parameters(), lr=lr)
-        self.loss = torch.nn.SmoothL1Loss(reduction="mean")
-        # self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
+        self.net = AC_NET(4, action_space).to(device)
+        self.optimizer1 = optim.Adam(self.net.parameters(), lr=args.lr)
 
-        self.temperature = temperature
-        self.min_temperature = min_temperature
-        self.temperature_decay = temperature_decay
-        self.beta = beta
-        self.h = 0
+        self.temperature = args.temperature
+        self.min_temperature = args.temperature_min
+        self.temperature_decay = args.temperature_decay
+        self.beta = args.beta
+        self.log_policies = []
+        self.values = []
+        self.rewards = []
+        self.entropies = []
+        self.last_state = None
+        
+        if args.no_ckpt:
+            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+        
+    
+    def plot_stats(self, q, action, color, v=None, ax=None):
+        plt.clf()
+        bars = plt.bar(range(len(q)), q, width=0.4)
+        bars[action].set_color(color)
+        plt.xlabel('Actions')
+        plt.ylabel('Policy-values')
+        plt.tight_layout()
+        plt.draw()
+        plt.pause(0.001)
+        plt.show(block=False)   
     
     
-    def act(self, state, height, show_stats=True):
+    def update_temperature(self):
+        self.temperature = max(self.min_temperature, self.temperature * self.temperature_decay)
+        
+        
+    def act(self, state, height, show_stats=True, return_both=False, ax=None):
         self.counter += 1
         color = 'r'
-        self.net.eval()
-        state = state.to(self.device)
-        q = self.net(state, 1)
-        q_ = None
-        if self.h > height:
-            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
-        self.h = height
+        #self.update_temperature()
+        print(type(state))
         
-        if q_ is not None:
-            p = torch.softmax(q_, dim=1)
-        else:
-            p = torch.softmax(q, dim=1)
-             
-        action = torch.multinomial(p, 1).item()
-        color = 'r'
-
-        if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
-
-        return action
-    
-    
-    def act2(self, state, height, show_stats=True):
-        self.counter += 1
-        color = 'r'
-        self.net.eval()
-        state = state.to(self.device)
-        q = self.net(state, 1)
-        q_ = None
-        if self.h > height:
-            q_ = q * torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0]).to(self.device)
-        self.h = height
+        with torch.no_grad():
+            state = state.to(self.device)
+            logits= self.net(state, model=1)
+            #logits = logits / self.temperature
+            p = torch.softmax(logits, dim=1)
+            
+            m = Categorical(p)
+            action = m.sample().item()
         
-        if q_ is not None:
-            p = torch.softmax(q_, dim=1)
-        else:
-            p = torch.softmax(q, dim=1)
-             
-        action = torch.multinomial(p, 1).item()
-        color = 'r'
-
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
-            plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
-
-        return action, q
+            self.plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
+            
+        if not return_both:
+            return action
+        else:
+            return action, logits
     
     
+    def get_experience(self, env, state, local_steps, device, show_stats=True, ax=None):
+        self.log_policies = []
+        self.values = []
+        self.rewards = []
+        self.entropies = []
+        self.last_state = None
+        for _ in range(local_steps):
+            
+            action, logits = self.act(state, height=None, ax=ax, show_stats=show_stats, return_both=True)
+            value = self.net(state, model=2)
+            policy = torch.softmax(logits, dim=1)
+            log_policy = torch.log_softmax(logits, dim=1)
+            entropy = -(policy * log_policy).sum(1, keepdim=True)
+            
+            state, reward, done, info = env.step(action)
+            #height = info['y_pos']
+            state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0)
 
-    def update(self, values, log_policies, rewards, entropies):
-        actor_loss = 0
-        critic_loss = 0
-        entropy_loss = 0
-        next_value = values[-1]
-
-        for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[-2::-1]:
-            advantage = reward + self.gamma * next_value.detach() - value.detach()
+            if done:
+                break
+            
+            env.render()
+            
+            self.values.append(value)
+            self.log_policies.append(log_policy[0, action])
+            self.rewards.append(reward)
+            self.entropies.append(entropy)
+            
+        self.last_state = state
+        return done, self.last_state
+        
+    def learn(self):
+        self.net.train()
+        
+        actor_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+        critic_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+        entropy_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+        gae = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+        
+        if self.done:
+            R = torch.zeros(1, 1, device=self.device)
+        else:
+            with torch.no_grad():
+                R = self.net(self.last_state, model=2)
+                
+        R = R.to(self.device)
+        next_value = R
+        
+        for value, log_policy, reward, entropy in list(zip(self.values, self.log_policies, self.rewards, self.entropies))[::-1]:
+            gae = gae * self.gamma 
+            gae = gae + reward + self.gamma * next_value.detach() - value.detach()
             next_value = value
-            actor_loss = actor_loss + log_policy * advantage
-            critic_loss = critic_loss + (advantage) ** 2 
-            entropy_loss = entropy_loss + entropy
+            actor_loss = actor_loss + log_policy * gae  
+            R = R * self.gamma + reward
+            critic_loss += (R - value) ** 2 / 2
+            entropy_loss += entropy
 
         total_loss = -actor_loss + critic_loss - self.beta * entropy_loss
         self.optimizer1.zero_grad()
         total_loss.backward()
-        
-        return next_value, total_loss
-            
- 
-    def learn(self):
-        if self.counter < self.warmup:
-            return None, None
-        
-        if self.counter % self.learn_every != 0:
-            return None, None
-
-        state, next_state, action, reward, done = self.sample_from_memory()
-
-        self.net.train()
-        state = state.to(self.device)
-        next_state = next_state.to(self.device)
-
-        p = self.net(state, 1)
-        p = torch.softmax(p, dim=1)
-        epsilon = 1e-8
-        p = torch.clamp(p, epsilon, 1.0 - epsilon)
-
-        vt = self.net(state, 2)
-        vtnext = self.net(next_state, 2)
-        value_loss = self.loss(vt, reward + self.gamma * vtnext)
-
-        log_policy = torch.log_softmax(p, dim=1)
-        entropy = -(p * log_policy).sum(1, keepdim=True).mean()
-            
-        advantage = (reward + self.gamma * vtnext - vt).detach()
-        log_p = torch.log(p[np.arange(0, self.batch_size), action.squeeze()])
-        policy_loss = -log_p.unsqueeze(1) * advantage - self.beta * entropy
-        
-        #total_loss = policy_loss.mean() + value_loss #- entropy * self.beta
-
-        #self.optimizer2.zero_grad()
-        self.optimizer1.zero_grad()
-
-        #value_loss.mean().backward(retain_graph=True)
-        #policy_loss.mean().backward()
-        value_loss.backward(retain_graph=True)
-        policy_loss.mean().backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
-
-        #self.optimizer2.step()
         self.optimizer1.step()
-
-        return vt.mean().item(), [policy_loss.mean().item(), value_loss.mean().item()]
+        
+        return next_value.item(), total_loss.item()
+            
     
-    def plot_stats(self, q, action, color, v=None, ax=None):
-        pass
-
-"""
-
-
-
 
 
 class DUELING_Agent(Agent):
+    '''
     def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
             device="cpu", learn_every=4, warmup=1000, lr=0.00025,
             epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9, ckpt=None, learn_states=False):
 
         super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
             learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-        
-        self.algorithm = "dueling"
+    '''
+    def __init__(self, action_space, args, device="cpu"):
+        super().__init__(action_space, args, device)
         self.h = 0
         self.values = np.empty((0, 2))
-        self.net = DUELING_Net(4, action_space).to(device)
-        if ckpt is not None:
-            self.net.load_state_dict(torch.load(ckpt, map_location=device))
-        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=lr)
-        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=lr)
+        self.net = DUELING_NET(4, action_space).to(device)
+        
+        if args.no_ckpt:
+            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+            
+        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=args.lr)
+        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=args.lr)
             
 
     def update_q(self, state, next_state, action, reward, done):

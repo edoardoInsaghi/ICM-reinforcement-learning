@@ -1,10 +1,14 @@
 from audioop import avg
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 import torch
 from Agent import *
 from Logger import *
 from Environment import *
+from arg_parse import *
+
+args = get_args()
 
 device = torch.device('cpu')
 if torch.cuda.is_available():
@@ -17,10 +21,11 @@ else:
     print('Using device CPU')
 
 
-env = new_env(SIMPLE_MOVEMENT, 84)
+env = new_env(args.movement, args.pixels)
 
+'''
 cluster = False
-learn = False
+learn = True
 if cluster:
     learn = True
 savefile = "ddqn.pth"
@@ -40,37 +45,45 @@ lr = 0.000025
 num_steps = 50
 
 # Start from pretrained, learn state representations, algorithm
-ckpt = "ddqn.pth"
+ckpt = "./weights/ddqn.pth"
 learn_states = False
 # algo = 'fdqn'
-algo = 'ddqn'
+#algo = 'ddqn'
 # algo = 'dueling'
-# algo = 'ac'
+algo = 'ddqn'
+'''
 
-if algo == 'fdqn':
-    player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
-elif algo == 'ddqn':
-    player = DDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
-elif algo =='dueling':
-    player = DUELING_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
-elif algo == 'ac':
-    player = AC_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay= epsilon_decay, lr=lr, ckpt=ckpt, max_memory=mem)
+if args.movement == "simple":
+    action_space = 7
+else:
+    action_space= 12
+    
+if args.algo == 'fdqn':
+    #player = FDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
+    player = FDQN_Agent(action_space, args, device=device )
+elif args.algo == 'ddqn':
+    #player = DDQN_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
+    player = DDQN_Agent(action_space, args,  device=device)
+elif args.algo =='dueling':
+    #player = DUELING_Agent(action_space, batch_size=batch_size, device=device, warmup=warmup, epsilon=epsilon, epsilon_decay=epsilon_decay, lr=lr, ckpt=ckpt, learn_states=learn_states, max_memory=mem)
+    player = DUELING_Agent(action_space, args, device=device)
+elif args.algo == 'ac':
+    player = AC_Agent(action_space, args, device=device)
 
-
-episodes = 10000
 # filename = "dueling.txt"
 filename = None
 logger = Logger(5, filename)
 
+ax = None
 # Plot Setups
 plt.ion()
-if algo == "ddqn":
+if args.algo == "ddqn":
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax = [ax1, ax2]
-elif algo == "fdqn": 
+elif args.algo == "fdqn": 
     plt.show()
     ax = None
-elif algo == "dueling":
+elif args.algo == "dueling":
     fig = plt.figure(figsize=(10, 10))
     ax1 = plt.subplot2grid((2, 2), (0, 0))
     ax2 = plt.subplot2grid((2, 2), (0, 1))
@@ -78,7 +91,7 @@ elif algo == "dueling":
     ax = [ax1, ax2, ax3]
 
 
-for episode in range(1, episodes+1):
+for episode in range(1, int(args.episodes)):
 
     distance = 0
     height = 0
@@ -86,17 +99,20 @@ for episode in range(1, episodes+1):
     state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
     
     while True:
-            
-        action = player.act(state, height, show_stats=not cluster, ax=ax)
+        
+        action = player.act(state, height, show_stats=not args.cluster, ax=ax)
         
         next_state, reward, done, info = env.step(action)
         next_state = torch.tensor(np.asarray(next_state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
         distance = info['x_pos']
         height = info['y_pos']
 
-        player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
+        if args.algo != "ac":
+            player.cache(state.squeeze(0), next_state.squeeze(0), action, reward, done)
+        else:
+            done, next_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
 
-        if learn:
+        if args.learn:
             q, loss = player.learn()
         else:
             q, loss = None, None
@@ -105,17 +121,93 @@ for episode in range(1, episodes+1):
         if done:
             break
         
-        if not cluster:
+        if not args.cluster:
             env.render()
 
         state = next_state
 
-    if episode % 5 == 0 and save:
-        torch.save(player.net.state_dict(), savefile)
+    
+    if episode % 5 == 0 and args.save_param != "":
+        torch.save(player.net.state_dict(), args.save_param)
 
-    if player.counter > player.warmup and learn:
+    if player.counter > player.warmup and args.learn:
         logger.log_episode()
         logger.print_last_episode()
+    
+        
+assert False
+player.net.load_state_dict(torch.load("./AC.pth", map_location=device))
+step = 0
+num_steps = 50
+
+
+for episode in range(1, episodes + 1):
+    
+    state = env.reset()
+    state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
+    height = 0
+    
+    done = False
+    while not done:
+        log_policies = []
+        values = []
+        rewards = []
+        entropies = []
+        curr_step = 0
+        step += 1
+        
+        for _ in range(num_steps):
+            curr_step += 1
+            
+            action, logits = player.act2(state, height, show_stats=True)
+            value = player.net(state, model=2)
+            policy = torch.softmax(logits, dim=1)
+            log_policy = torch.log_softmax(logits, dim=1)
+            entropy = -(policy * log_policy).sum(1, keepdim=True)
+            
+            state, reward, done, info = env.step(action)
+            #distance = info['x_pos']
+            height = info['y_pos']
+            state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
+
+            if done:
+                break
+            
+            env.render()
+            
+            values.append(value)
+            log_policies.append(log_policy[0, action])
+            rewards.append(reward)
+            entropies.append(entropy)
+            
+        v, loss = player.update(log_policies=log_policies, rewards=rewards, values=values, entropies=entropies, done=done, last_state=state)
+        print(f"value {v.item()}", {info["score"]})
+        
+        if step % 500 == 0 and save:
+            torch.save(player.net.state_dict(), "AC.pth")
+            print(f"saved model parameters step {step}")
+
+env.close()
+
+assert False
+for _ in range(30):
+    player.net.eval()
+    
+    state = env.reset()
+    state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
+    height = 0
+    
+    done = False
+    while not done:
+        action, logits = player.act2(state, height, show_stats=True)
+        value = player.net(state, model=2)
+        state, reward, done, info = env.step(action)
+        state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
+        print(value.item())
+        
+        env.render()
+        
+env.close()
 
 env.close()
 
