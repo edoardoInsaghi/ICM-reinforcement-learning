@@ -10,5 +10,5 @@
 #SBATCH --mem=32GB
 
 module load cuda
-source ../myenv/bin/activate
-python3 -u ac_train.py --no_ckpt  --cluster --save_param weights/ac.pth 
+source ../rlenv/bin/activate
+python3 -u main.py --cluster 

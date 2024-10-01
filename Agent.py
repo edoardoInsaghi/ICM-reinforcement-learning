@@ -5,20 +5,14 @@ import torch.optim as optim
 import numpy as np
 from Modules import *
 from abc import abstractmethod
-from torch.distributions import Categorical
+from torch.distributions import Categorical 
 
 class Agent():
-    '''
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e5), 
-                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
-    '''
     def __init__(self, action_space, args, device):
         self.counter = 0        
         self.memory = []
         self.max_memory = args.max_memory   
         self.action_space = action_space
-        #self.learn_states = learn_states
 
         self.gamma = args.gamma # Reward Discount
         self.epsilon = args.epsilon # Exploration Rate
@@ -78,26 +72,18 @@ class Agent():
 
 
 class FDQN_Agent(Agent):
-    '''
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-                 device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                 epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, sync_every=1000, ckpt=None, learn_states=False):
-        
-        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-    '''
     def __init__(self, action_space, args, device):
         super().__init__(action_space, args, device)
         
         self.sync_every = args.sync_every
         self.net = FDQN_NET(4, action_space).to(device)
         
-        if args.no_ckpt:
+        if args.load_param != "":
+            print(f"Loading weights from {args.load_param}")
             self.net.load_state_dict(torch.load(args.load_param, map_location=device))
             
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=args.lr)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=self.lr)
         self.h = 0
-        self.cross_loss = nn.CrossEntropyLoss()
 
 
     def td_estimate(self, state, action):
@@ -114,14 +100,9 @@ class FDQN_Agent(Agent):
         return reward + self.gamma * q_target * ~done
 
 
-    def update_q_online(self, td_estimate, td_target, state=None, next_state=None, action=None):
+    def update_q_online(self, td_estimate, td_target):
         self.net.train()
-        if state is not None and next_state is not None and action is not None:
-            ahat = self.net.RDM(state, next_state)
-            reverse_loss = self.cross_loss(ahat, action.squeeze(1))
-            loss = self.loss(td_estimate, td_target) + reverse_loss
-        else:
-            loss = self.loss(td_estimate, td_target)
+        loss = self.loss(td_estimate, td_target)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -143,14 +124,15 @@ class FDQN_Agent(Agent):
             color = 'g'
         else:
             action = torch.argmax(q).item()
-            if height < self.h:
-                action = self.mask_jumps(action)
-            color = 'r' 
+            #if height < self.h:
+            #    action = self.mask_jumps(action)
+            color = 'r'
 
-        self.h = height
+        #self.h = height
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
+            q = q - q.mean()
             self.plot_stats(q.squeeze().detach().cpu().numpy(), action, color)
 
         return action
@@ -170,10 +152,7 @@ class FDQN_Agent(Agent):
 
         td_est = self.td_estimate(state, action)
         td_tgt = self.td_target(reward, next_state, done)
-        if self.learn_states:
-            loss = self.update_q_online(td_est, td_tgt, state, next_state, action)
-        else:
-            loss = self.update_q_online(td_est, td_tgt)
+        loss = self.update_q_online(td_est, td_tgt)
 
         return [td_est.mean().item(), None], [loss, None]
     
@@ -193,25 +172,29 @@ class FDQN_Agent(Agent):
 
 
 
-class DDQN_Agent(Agent):
 
-    '''
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-                device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-                epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.999997, ckpt=None, learn_states=False):
-    
-        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-                         learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-    ''' 
+
+
+
+
+
+
+
+
+
+
+
+class DDQN_Agent(Agent):
     def __init__(self, action_space, args, device):
         super().__init__(action_space, args, device)
 
         self.net = DDQN_NET(4, action_space).to(device)
         
-        if args.no_ckpt:
+        if args.load_param != "":
+            print(f"Loading weights from {args.load_param}")
             self.net.load_state_dict(torch.load(args.load_param, map_location=device))
             
-        self.optimizer = optim.Adam(self.net.parameters(), lr=args.lr)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=self.lr)
         self.h = 0
         
 
@@ -235,12 +218,10 @@ class DDQN_Agent(Agent):
         loss = loss1 + loss2
 
         self.optimizer.zero_grad()
-
-        loss1.backward(retain_graph=True)
-        loss2.backward()
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
-
         self.optimizer.step()
+
         return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
     
 
@@ -259,11 +240,11 @@ class DDQN_Agent(Agent):
             color = 'g'
         else: 
             action = torch.argmax(q).item()
-            if height < self.h:
-                action = self.mask_jumps(action)
+            #if height < self.h:
+            #    action = self.mask_jumps(action)
             color = 'r' 
 
-        self.h = height
+        #self.h = height
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
@@ -280,7 +261,6 @@ class DDQN_Agent(Agent):
             return None, None
 
         state, next_state, action, reward, done = self.sample_from_memory()
-        
         mean_q, loss = self.update_q(state, next_state, action, reward, done)
 
         return mean_q, loss
@@ -303,6 +283,18 @@ class DDQN_Agent(Agent):
         plt.pause(0.001)
         plt.show(block=False)
     
+
+
+
+
+
+
+
+
+
+
+
+
 
 class AC_Agent(Agent):
     def __init__(self, action_space, args, device="cpu"):
@@ -436,26 +428,32 @@ class AC_Agent(Agent):
     
 
 
-class DUELING_Agent(Agent):
-    '''
-    def __init__(self, action_space, gamma=0.9, batch_size=32, size=84, max_memory=int(1e4), 
-            device="cpu", learn_every=4, warmup=1000, lr=0.00025,
-            epsilon = 0.15, epsilon_min=0.01, epsilon_decay=0.9, ckpt=None, learn_states=False):
 
-        super().__init__(action_space, gamma, batch_size, size, max_memory, device, 
-            learn_every, warmup, lr, epsilon, epsilon_min, epsilon_decay, ckpt, learn_states)
-    '''
-    def __init__(self, action_space, args, device="cpu"):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class DUELING_Agent(Agent):
+    def __init__(self, action_space, args, device):
         super().__init__(action_space, args, device)
+
         self.h = 0
         self.values = np.empty((0, 2))
         self.net = DUELING_NET(4, action_space).to(device)
-        
-        if args.no_ckpt:
+        if args.load_param != "":
+            print(f"Loading weights from {args.load_param}")
             self.net.load_state_dict(torch.load(args.load_param, map_location=device))
-            
-        self.optimizer1 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1.parameters()}, {"params":self.net.fc2.parameters()}], lr=args.lr)
-        self.optimizer2 = optim.Adam([{"params":self.net.blocks.parameters()}, {"params":self.net.fc1_2.parameters()}, {"params":self.net.fc2_2.parameters()}], lr=args.lr)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=self.lr)
             
 
     def update_q(self, state, next_state, action, reward, done):
@@ -473,19 +471,17 @@ class DUELING_Agent(Agent):
         q1t = self.net(state, 1)[np.arange(0, self.batch_size), action]
         q2t = self.net(state, 2)[np.arange(0, self.batch_size), action]
 
-        loss1 = self.loss(target2, q1t)
-        loss2 = self.loss(target1, q2t) 
+        if np.random.rand() < 0.5:
+            loss = self.loss(target2, q1t)
+        else: 
+            loss = self.loss(target1, q2t) 
+        
 
-        self.optimizer1.zero_grad()
-        self.optimizer2.zero_grad()
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
-        loss1.backward(retain_graph=True)
-        loss2.backward()
-
-        self.optimizer1.step()
-        self.optimizer2.step()
-
-        return [q1t.mean().item(), q2t.mean().item()], [loss1.item(), loss2.item()]
+        return [q1t.mean().item(), q2t.mean().item()], [loss.item(), None]
 
 
     @torch.no_grad()
@@ -502,8 +498,8 @@ class DUELING_Agent(Agent):
             color = 'g'
         else: 
             action = torch.argmax(q).item()
-            if height < self.h:
-                action = self.mask_jumps(action)
+            #if height < self.h:
+            #    action = self.mask_jumps(action)
             color = 'r' 
 
         self.h = height

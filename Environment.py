@@ -10,6 +10,7 @@ class FrameSkip(gym.Wrapper):
         super(FrameSkip, self).__init__(env)
         self._skip = skip
         self.current_score = 0
+        self.life = 3
 
     def step(self, action):
         total_reward = 0.0
@@ -17,15 +18,20 @@ class FrameSkip(gym.Wrapper):
         for i in range(self._skip):
             obs, reward, done, info = self.env.step(action)
             total_reward += reward
+            lifes = info["life"]
+            if self.life > lifes:
+                reward -= 50
+                self.life = lifes
             total_reward += (info["score"] - self.current_score) / 40.0
             self.current_score = info["score"]
             if done:
+                self.life = 3
                 if info["flag_get"]:
                     reward += 50
                 else:
                     reward -= 50
                 break
-
+        
         return obs, total_reward / 10.0, done, info
     
 '''

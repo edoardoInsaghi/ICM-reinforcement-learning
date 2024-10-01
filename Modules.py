@@ -61,22 +61,24 @@ class FDQN_NET(nn.Module):
         super(FDQN_NET, self).__init__()
 
         self.backbone = nn.Sequential(
-            nn.Conv2d(channels_in, 32, kernel_size=8, stride=4),
+            nn.Conv2d(channels_in, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU()
         )
         
         self.fc1 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(32 * 6 * 6, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
 
         self.fc2 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(32 * 6 * 6, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
@@ -115,17 +117,19 @@ class DDQN_NET(nn.Module):
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
             nn.ReLU()
         )
         
         self.fc1 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
 
         self.fc2 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
@@ -200,29 +204,31 @@ class DUELING_NET(nn.Module):
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
             nn.ReLU()
         )
-        
+            
         self.fc1 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
 
         self.fc2 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, 1)
         )
 
         self.fc1_2 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, action_space)
         )
 
         self.fc2_2 = nn.Sequential(
-            nn.Linear(3136, 512),
+            nn.Linear(1600, 512),
             nn.ReLU(),
             nn.Linear(512, 1)
         )
@@ -244,3 +250,19 @@ class DUELING_NET(nn.Module):
             return self.fc2(x) + self.fc1(x) - self.fc1(x).mean()
         else:
             return self.fc2_2(x) + self.fc1_2(x) - self.fc1_2(x).mean()
+        
+    @torch.no_grad()
+    def get_value(self, x):
+        self.eval()
+        B, C, H, W = x.shape
+        x = self.backbone(x)
+        x = x.view(B, -1)
+        return [self.fc2(x), self.fc2_2(x)]
+    
+    @torch.no_grad()
+    def get_adv(self, x):
+        self.eval()
+        B, C, H, W = x.shape
+        x = self.backbone(x)
+        x = x.view(B, -1)
+        return [self.fc1(x) - self.fc1(x).mean(), self.fc1_2(x) - self.fc1_2(x).mean()]
