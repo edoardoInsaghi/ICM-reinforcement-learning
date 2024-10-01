@@ -112,11 +112,7 @@ for episode in range(1, int(args.episodes)):
         else:
             done, next_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
 
-        if args.learn:
             q, loss = player.learn()
-        else:
-            q, loss = None, None
-        logger.log_step(reward, loss, q, distance)
 
         if done:
             break

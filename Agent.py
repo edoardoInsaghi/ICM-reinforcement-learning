@@ -304,14 +304,12 @@ class DDQN_Agent(Agent):
         plt.show(block=False)
     
 
-
-
 class AC_Agent(Agent):
     def __init__(self, action_space, args, device="cpu"):
         super().__init__(action_space, args, device)
         
         self.net = AC_NET(4, action_space).to(device)
-        self.optimizer1 = optim.Adam(self.net.parameters(), lr=args.lr)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=args.lr)
 
         self.temperature = args.temperature
         self.min_temperature = args.temperature_min
@@ -322,9 +320,11 @@ class AC_Agent(Agent):
         self.rewards = []
         self.entropies = []
         self.last_state = None
+        self.done = False
+        self.cluster = args.cluster
         
         if args.no_ckpt:
-            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+            self.net.load_state_dict(torch.load("weights/ac.pth", map_location=device))
         
     
     def plot_stats(self, q, action, color, v=None, ax=None):
@@ -343,11 +343,10 @@ class AC_Agent(Agent):
         self.temperature = max(self.min_temperature, self.temperature * self.temperature_decay)
         
         
-    def act(self, state, height, show_stats=True, return_both=False, ax=None):
+    def act(self, state, height, show_stats=True, ax=None):
         self.counter += 1
         color = 'r'
         #self.update_temperature()
-        print(type(state))
         
         with torch.no_grad():
             state = state.to(self.device)
@@ -361,10 +360,8 @@ class AC_Agent(Agent):
         if show_stats and self.counter > self.warmup and self.counter % 2 == 0:
             self.plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
             
-        if not return_both:
-            return action
-        else:
-            return action, logits
+        
+        return action
     
     
     def get_experience(self, env, state, local_steps, device, show_stats=True, ax=None):
@@ -373,44 +370,48 @@ class AC_Agent(Agent):
         self.rewards = []
         self.entropies = []
         self.last_state = None
+        self.done = None
+        
         for _ in range(local_steps):
             
-            action, logits = self.act(state, height=None, ax=ax, show_stats=show_stats, return_both=True)
+            action = self.act(state, height=None, ax=ax, show_stats=show_stats)
+            logits= self.net(state, model=1)
             value = self.net(state, model=2)
             policy = torch.softmax(logits, dim=1)
             log_policy = torch.log_softmax(logits, dim=1)
             entropy = -(policy * log_policy).sum(1, keepdim=True)
             
-            state, reward, done, info = env.step(action)
+            state, reward, self.done, info = env.step(action)
             #height = info['y_pos']
             state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0)
-
-            if done:
-                break
-            
-            env.render()
-            
             self.values.append(value)
             self.log_policies.append(log_policy[0, action])
             self.rewards.append(reward)
             self.entropies.append(entropy)
+
+            if self.done:
+                break
+            
+            if not self.cluster:
+                env.render()
+            
             
         self.last_state = state
-        return done, self.last_state
+        return self.done, self.last_state
         
+    
     def learn(self):
         self.net.train()
-        
-        actor_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
-        critic_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
-        entropy_loss = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+
+        actor_loss = 0.0
+        critic_loss = 0.0
+        entropy_loss = 0.0
         gae = torch.zeros((1, 1), dtype=torch.float).to(self.device)
-        
+
         if self.done:
             R = torch.zeros(1, 1, device=self.device)
         else:
-            with torch.no_grad():
-                R = self.net(self.last_state, model=2)
+            R = self.net(self.last_state, model=2)
                 
         R = R.to(self.device)
         next_value = R
@@ -419,16 +420,16 @@ class AC_Agent(Agent):
             gae = gae * self.gamma 
             gae = gae + reward + self.gamma * next_value.detach() - value.detach()
             next_value = value
-            actor_loss = actor_loss + log_policy * gae  
             R = R * self.gamma + reward
-            critic_loss += (R - value) ** 2 / 2
-            entropy_loss += entropy
+            actor_loss = actor_loss + (log_policy * gae)  
+            critic_loss = critic_loss + ((R - value) ** 2 / 2)
+            entropy_loss = entropy_loss + entropy
 
         total_loss = -actor_loss + critic_loss - self.beta * entropy_loss
-        self.optimizer1.zero_grad()
+        self.optimizer.zero_grad()
         total_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
-        self.optimizer1.step()
+        self.optimizer.step()
         
         return next_value.item(), total_loss.item()
             

@@ -27,8 +27,27 @@ class FrameSkip(gym.Wrapper):
                 break
 
         return obs, total_reward / 10.0, done, info
+    
+'''
+class FrameSkip(gym.Wrapper):
+    def __init__(self, env, skip=4):
+        super(FrameSkip, self).__init__(env)
+        self.skip = skip
 
+    def step(self, action):
+        total_reward = 0.0
+        done = False
+        info = {}
+        obs = None
 
+        for _ in range(self.skip):
+            obs, reward, done, info = self.env.step(action)
+            total_reward += reward
+            if done:
+                break
+
+        return obs, total_reward, done, info
+'''
 
 def new_env(movement_type, w):
     env = gym_super_mario_bros.make('SuperMarioBros-v0')

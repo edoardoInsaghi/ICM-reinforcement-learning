@@ -5,7 +5,7 @@ def get_args():
     
     parser.add_argument("--movement", type=str, default="simple")
     parser.add_argument("--warmup", type=int, default=1000)
-    parser.add_argument('--lr', type=float, default=2.5e-4)
+    parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--gamma', type=float, default=0.9, help='discount factor for rewards')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
     parser.add_argument('--beta', type=float, default=0.01, help='entropy coefficient')
