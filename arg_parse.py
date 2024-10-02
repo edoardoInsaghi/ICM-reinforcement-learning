@@ -2,7 +2,6 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser()
-    
     parser.add_argument("--movement", type=str, default="simple")
     
     parser.add_argument('--lr', type=float, default=0.0001)

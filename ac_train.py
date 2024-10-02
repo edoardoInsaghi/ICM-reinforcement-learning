@@ -34,17 +34,26 @@ for episode in range(0, int(args.episodes)):
 
     state = env.reset()
     state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
+
+    steps = 0
+    r = 0
     
     while True:
     
         done, last_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
+        steps += len(player.values)
+        r += np.sum(player.rewards)
+
         v, loss = player.learn()
         training_step += 1
         if training_step % 250 == 0 and args.save_param != "":
             print(f"saved model pramaters step {training_step}")
             torch.save(player.net.state_dict(), args.save_param)
         if done:
+            with open(args.save_file, 'a') as f:
+                state, reward, done, info = env.step(0)
+                f.write(f"{episode},{v},{info['x_pos']},{info['flag_get']},{steps}\n")            
             break
-            
+        
         state = last_state
         
