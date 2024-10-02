@@ -55,8 +55,8 @@ class FrameSkip(gym.Wrapper):
         return obs, total_reward, done, info
 '''
 
-def new_env(movement_type, w):
-    env = gym_super_mario_bros.make('SuperMarioBros-v0')
+def new_env(movement_type, w, world, stage):
+    env = gym_super_mario_bros.make('SuperMarioBros-{}-{}-v0'.format(world, stage))
     
     if movement_type == "simple":
         movement = SIMPLE_MOVEMENT

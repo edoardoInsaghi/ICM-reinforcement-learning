@@ -315,9 +315,11 @@ class AC_Agent(Agent):
         self.done = False
         self.cluster = args.cluster
         
-        if args.no_ckpt:
-            self.net.load_state_dict(torch.load("weights/ac.pth", map_location=device))
-        
+        '''
+        if args.load_param != "":
+            print(f"Loading weights from {args.load_param}")
+            self.net.load_state_dict(torch.load(args.load_param, map_location=device))
+        '''
     
     def plot_stats(self, q, action, color, v=None, ax=None):
         plt.clf()
@@ -384,9 +386,8 @@ class AC_Agent(Agent):
             if self.done:
                 break
             
-            if not self.cluster:
+            if show_stats:
                 env.render()
-            
             
         self.last_state = state
         return self.done, self.last_state
@@ -425,7 +426,35 @@ class AC_Agent(Agent):
         
         return next_value.item(), total_loss.item()
             
-    
+            
+    def learn2(self):
+        self.net.train()
+
+        actor_loss = 0.0
+        critic_loss = 0.0
+        entropy_loss = 0.0
+        gae = torch.zeros((1, 1), dtype=torch.float).to(self.device)
+
+        if self.done:
+            R = torch.zeros(1, 1, device=self.device)
+        else:
+            R = self.net(self.last_state, model=2)
+                
+        R = R.to(self.device)
+        next_value = R
+        
+        for value, log_policy, reward, entropy in list(zip(self.values, self.log_policies, self.rewards, self.entropies))[::-1]:
+            gae = gae * self.gamma 
+            gae = gae + reward + self.gamma * next_value.detach() - value.detach()
+            next_value = value
+            R = R * self.gamma + reward
+            actor_loss = actor_loss + (log_policy * gae)  
+            critic_loss = critic_loss + ((R - value) ** 2 / 2)
+            entropy_loss = entropy_loss + entropy
+
+        total_loss = -actor_loss + critic_loss - self.beta * entropy_loss
+        
+        return total_loss
 
 
 
