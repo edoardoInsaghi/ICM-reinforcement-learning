@@ -24,7 +24,7 @@ def get_args():
     parser.add_argument("--sync_every", type=int, default=1000)
     parser.add_argument("--pixels", type=int, default=84)
     parser.add_argument("--learn_every", type=int, default=4)
-    parser.add_argument("--save_file", type=str, default="data/fdqn.txt")
+    parser.add_argument("--save_file", type=str, default="data/ac1.txt")
     parser.add_argument("--save_param", type=str, default="weights")
     parser.add_argument("--load_param", type=str, default="")
     parser.add_argument("--algo", type=str, default='fdqn')

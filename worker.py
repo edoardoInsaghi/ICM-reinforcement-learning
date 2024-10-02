@@ -12,18 +12,25 @@ def worker(rank, args, global_model, optimizer, device, action_space, update_loc
     state = env.reset()
     state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32).unsqueeze(0).to(device)
     step = 0
+    num_action = 0
+    r = 0
+    episode = 0
     
     while True:
         agent.net.load_state_dict(global_model.state_dict())
+        episode += 1
         
         if rank == 0:
-            if step % 10 == 0 and args.save_param != "":
+            if step % 250 == 0 and args.save_param != "":
                 print(f"process {rank} speaking, {step} steps, saving model paramaters")
                 torch.save(global_model.state_dict(), "{}/a3c_super_mario_bros_{}_{}".format(args.save_param, args.world, args.stage))
             
             done, state = agent.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
+            num_action += len(agent.values)
+            r += np.sum(agent.rewards)
         else:
             done, state = agent.get_experience(env, state, args.local_steps, device, show_stats=False)
+        
 
         loss = agent.learn2()
 
@@ -45,3 +52,9 @@ def worker(rank, args, global_model, optimizer, device, action_space, update_loc
         if done:
             state = env.reset()
             state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32).unsqueeze(0)
+            
+            if rank == 0:
+                with open(args.save_file, 'a') as f:
+                    f.write(f"{episode},{r},{agent.info['x_pos']},{agent.info['flag_get']},{num_action}\n")
+                    if agent.info["flag_get"] == True:
+                        break         

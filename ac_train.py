@@ -20,7 +20,7 @@ elif torch.backends.mps.is_available():
 else:
     print('Using device CPU')
 
-env = new_env(args.movement, args.pixels)
+env = new_env(args.movement, args.pixels, args.world, args.stage)
 
 if args.movement == "simple":
     action_space = 7
@@ -51,8 +51,9 @@ for episode in range(0, int(args.episodes)):
             torch.save(player.net.state_dict(), args.save_param)
         if done:
             with open(args.save_file, 'a') as f:
-                state, reward, done, info = env.step(0)
-                f.write(f"{episode},{v},{info['x_pos']},{info['flag_get']},{steps}\n")            
+                f.write(f"{episode},{r},{player.info['x_pos']},{player.info['flag_get']},{steps}\n")
+                if player.info["flag_get"] == True:
+                    break         
             break
         
         state = last_state

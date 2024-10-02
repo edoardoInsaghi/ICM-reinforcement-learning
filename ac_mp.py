@@ -21,6 +21,7 @@ if __name__ == '__main__':
         action_space= 12
         
     device = torch.device('cpu')
+    '''
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print('Using device CUDA')
@@ -29,6 +30,8 @@ if __name__ == '__main__':
         print('Using device MPS')
     else:
         print('Using device CPU')
+        '''
+    print('Using device CPU')
     
     update_lock = Lock()
     

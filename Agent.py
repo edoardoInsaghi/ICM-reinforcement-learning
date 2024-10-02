@@ -314,12 +314,13 @@ class AC_Agent(Agent):
         self.last_state = None
         self.done = False
         self.cluster = args.cluster
+        self.info = None
         
-        '''
+        
         if args.load_param != "":
             print(f"Loading weights from {args.load_param}")
             self.net.load_state_dict(torch.load(args.load_param, map_location=device))
-        '''
+        
     
     def plot_stats(self, q, action, color, v=None, ax=None):
         plt.clf()
@@ -375,7 +376,7 @@ class AC_Agent(Agent):
             log_policy = torch.log_softmax(logits, dim=1)
             entropy = -(policy * log_policy).sum(1, keepdim=True)
             
-            state, reward, self.done, info = env.step(action)
+            state, reward, self.done, self.info = env.step(action)
             #height = info['y_pos']
             state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0)
             self.values.append(value)
