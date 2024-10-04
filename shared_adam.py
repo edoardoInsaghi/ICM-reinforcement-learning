@@ -13,6 +13,6 @@ class SharedAdam(Adam):
                 # State initialization
                 state = self.state[p]
 
-                state['step'] = torch.tensor(0.).share_memory_()
+                state['step'] = torch.tensor(0.)
                 state['exp_avg'] = torch.zeros_like(p.data).share_memory_()
                 state['exp_avg_sq'] = torch.zeros_like(p.data).share_memory_()

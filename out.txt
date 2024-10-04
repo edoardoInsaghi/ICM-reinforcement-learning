@@ -1,0 +1,2 @@
+Using device CUDA
+Loading weights from weights/a3c_super_mario_bros_1_2

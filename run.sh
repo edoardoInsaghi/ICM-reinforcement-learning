@@ -11,4 +11,4 @@
 
 module load cuda
 source ../myenv/bin/activate
-python3 -u ac_train.py --cluster --load_param weights/ac.pth --save_param weights/ac.pth
+python3 ac_mp.py --cluster --num_workers=4 --stage 2 --save_file data/ac2.csv --load_param weights/a3c_super_mario_bros_1_2

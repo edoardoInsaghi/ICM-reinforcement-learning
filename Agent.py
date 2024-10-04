@@ -315,12 +315,13 @@ class AC_Agent(Agent):
         self.done = False
         self.cluster = args.cluster
         self.info = None
+        self.device = device
         
-        
+        '''
         if args.load_param != "":
             print(f"Loading weights from {args.load_param}")
             self.net.load_state_dict(torch.load(args.load_param, map_location=device))
-        
+        '''
     
     def plot_stats(self, q, action, color, v=None, ax=None):
         plt.clf()
@@ -378,7 +379,7 @@ class AC_Agent(Agent):
             
             state, reward, self.done, self.info = env.step(action)
             #height = info['y_pos']
-            state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0)
+            state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(self.device)
             self.values.append(value)
             self.log_policies.append(log_policy[0, action])
             self.rewards.append(reward)
@@ -420,7 +421,7 @@ class AC_Agent(Agent):
             entropy_loss = entropy_loss + entropy
 
         total_loss = -actor_loss + critic_loss - self.beta * entropy_loss
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad() 
         total_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.5)
         self.optimizer.step()

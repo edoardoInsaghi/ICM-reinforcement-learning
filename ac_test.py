@@ -28,6 +28,10 @@ else:
     action_space= 12
     
 player = AC_Agent(action_space, args, device=device)
+    
+if args.load_param != "":
+    print(f"Loading weights from {args.load_param}")
+    player.net.load_state_dict(torch.load(args.load_param, map_location=device))
 
 player.net.eval()
 for episode in range(0, int(args.episodes)):
@@ -40,9 +44,8 @@ for episode in range(0, int(args.episodes)):
         action = player.act(state, height=None, ax=None, show_stats=not args.cluster)
         state, reward, done, info = env.step(action)
         state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(device)
-        
+
         env.render()
-        
         if done:
             break
     

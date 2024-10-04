@@ -1,0 +1,47 @@
+process 0 speaking, 250 steps, saving model paramaters
+process 0 speaking, 500 steps, saving model paramaters
+process 0 speaking, 750 steps, saving model paramaters
+process 0, time for 1000 updates 2366.77
+process 0 speaking, 1000 steps, saving model paramaters
+process 1, time for 1000 updates 2371.75
+process 3, time for 1000 updates 2375.59
+process 2, time for 1000 updates 2390.37
+process 0 speaking, 1250 steps, saving model paramaters
+process 0 speaking, 1500 steps, saving model paramaters
+process 0 speaking, 1750 steps, saving model paramaters
+process 1, time for 1000 updates 4760.06
+process 0, time for 1000 updates 4760.58
+process 0 speaking, 2000 steps, saving model paramaters
+process 3, time for 1000 updates 4769.08
+process 2, time for 1000 updates 4791.83
+process 0 speaking, 2250 steps, saving model paramaters
+process 0 speaking, 2500 steps, saving model paramaters
+process 0 speaking, 2750 steps, saving model paramaters
+process 0, time for 1000 updates 7152.61
+process 0 speaking, 3000 steps, saving model paramaters
+process 1, time for 1000 updates 7159.12
+process 3, time for 1000 updates 7160.58
+process 2, time for 1000 updates 7196.10
+process 0 speaking, 250 steps, saving model paramaters
+process 0 speaking, 500 steps, saving model paramaters
+process 0 speaking, 750 steps, saving model paramaters
+process 0 speaking, 1000 steps, saving model paramaters
+process 0 speaking, 1250 steps, saving model paramaters
+process 0 speaking, 1500 steps, saving model paramaters
+process 0 speaking, 1750 steps, saving model paramaters
+process 0 speaking, 2000 steps, saving model paramaters
+process 0 speaking, 2250 steps, saving model paramaters
+process 0 speaking, 2500 steps, saving model paramaters
+process 0 speaking, 2750 steps, saving model paramaters
+process 0 speaking, 3000 steps, saving model paramaters
+process 0 speaking, 250 steps, saving model paramaters
+process 0 speaking, 500 steps, saving model paramaters
+process 0 speaking, 750 steps, saving model paramaters
+process 0 speaking, 1000 steps, saving model paramaters
+process 0 speaking, 1250 steps, saving model paramaters
+process 0 speaking, 1500 steps, saving model paramaters
+process 0 speaking, 1750 steps, saving model paramaters
+process 0 speaking, 2000 steps, saving model paramaters
+process 0 speaking, 2250 steps, saving model paramaters
+process 0 speaking, 2500 steps, saving model paramaters
+process 0 speaking, 2750 steps, saving model paramaters

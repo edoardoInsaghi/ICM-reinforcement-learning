@@ -12,7 +12,7 @@ from multiprocessing import Lock
 
 if __name__ == '__main__':
 
-    #mp.set_start_method('spawn')
+    mp.set_start_method('spawn')
     
     args = get_args()
     if args.movement == "simple":
@@ -21,7 +21,7 @@ if __name__ == '__main__':
         action_space= 12
         
     device = torch.device('cpu')
-    '''
+    
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print('Using device CUDA')
@@ -30,8 +30,7 @@ if __name__ == '__main__':
         print('Using device MPS')
     else:
         print('Using device CPU')
-        '''
-    print('Using device CPU')
+        
     
     update_lock = Lock()
     
@@ -41,8 +40,9 @@ if __name__ == '__main__':
         print(f"Loading weights from {args.load_param}")
         global_model.load_state_dict(torch.load(args.load_param, map_location=device))
         
-    global_model.share_memory()  
     global_model = global_model.to(device)
+    global_model.share_memory()  
+    #global_model = global_model.cpu()
     
     optimizer = SharedAdam(global_model.parameters(), lr=args.lr)
     
