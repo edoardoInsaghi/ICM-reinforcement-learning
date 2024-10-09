@@ -7,6 +7,7 @@ from Agent import *
 from Logger import *
 from Environment import *
 from arg_parse import *
+from Modules import *
 
 args = get_args()
 
@@ -27,8 +28,9 @@ if args.movement == "simple":
 else:
     action_space= 12
     
-player = AC_Agent(action_space, args, device=device)
+player = ICM_Agent(action_space, args, device)
 training_step = 0
+
 
 for episode in range(0, int(args.episodes)):
 
@@ -48,7 +50,7 @@ for episode in range(0, int(args.episodes)):
         training_step += 1
         if training_step % 250 == 0 and args.save_param != "":
             print(f"saved model pramaters step {training_step}")
-            torch.save(player.net.state_dict(), args.save_param)
+            #torch.save(player.net.state_dict(), args.save_param)
         if done:
             with open(args.save_file, 'a') as f:
                 f.write(f"{episode},{r},{player.info['x_pos']},{player.info['flag_get']},{steps}\n")

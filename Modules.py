@@ -5,55 +5,6 @@ import torch.optim as optim
 import numpy as np
 
 
-'''
-class Reverse_Dynamics_Module(nn.Module):
-
-    def __init__(self, size=84, action_space=12):
-        super(Reverse_Dynamics_Module, self).__init__()
-        self.size = size
-        self.action_space = action_space
-
-        self.blocks = nn.ModuleList(
-            [ConvBlock(4, 32, stride=2, padding=1)] + 
-            [ConvBlock(32, 32, stride=2, padding=1)] + 
-            [ConvBlock(32, 32, stride=2, padding=1)] +
-            [ConvBlock(32, 8, stride=2, padding=1)]
-        )
-
-        self.fc = nn.Sequential(
-            nn.Linear(8*6*6*2, 256),
-            nn.ReLU(),
-            nn.Linear(256, action_space)
-        )
-        self._initialize_weights()
-
-
-    def _initialize_weights(self):
-        for module in self.modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
-                # nn.init.kaiming_uniform_(module.weight)
-                nn.init.constant_(module.bias, 0)
-
-
-    def forward(self, state, next_state):
-        B, C, H, W = state.shape
-        for block in self.blocks:
-              state = block(state)
-              next_state = block(next_state)
-
-        x = torch.cat((state.view(B,-1), state.view(B,-1)), dim=1)
-        return self.fc(x)
-        
-    @torch.no_grad()
-    def get_latent_state(self, state):
-        B, C, H, W = state.shape
-        self.eval()
-        for block in self.blocks:
-            state = block(state)
-        return state.view(B, -1)
-'''
-
 
 
 class FDQN_NET(nn.Module):
@@ -266,3 +217,73 @@ class DUELING_NET(nn.Module):
         x = self.backbone(x)
         x = x.view(B, -1)
         return [self.fc1(x) - self.fc1(x).mean(), self.fc1_2(x) - self.fc1_2(x).mean()]
+
+
+
+class Reverse_Dynamics_Module(nn.Module):
+
+    def __init__(self, channels_in=4, action_space=12):
+        super(Reverse_Dynamics_Module, self).__init__()
+
+
+        self.backbone = nn.Sequential(
+            nn.Conv2d(channels_in, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(1152, 288),
+            nn.ReLU(),
+        )
+        
+        self.fc = nn.Sequential(
+            nn.Linear(288*2, 256),
+            nn.ReLU(),
+            nn.Linear(256, action_space)
+        )
+        self._initialize_weights()
+
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+
+
+    def forward(self, state, next_state):
+        B = state.shape[0]
+        state, next_state = self.backbone(state), self.backbone(next_state)
+        x = torch.cat((state, next_state), dim=1)
+        return self.fc(x)
+        
+    @torch.no_grad()
+    def get_latent_state(self, state):
+        B, C, H, W = state.shape
+        self.eval()
+        state = self.backbone(state)
+        return state.view(B, -1)
+    
+    
+    
+class ForwardModule(nn.Module):
+    def __init__(self, action_space=12):
+        super(ForwardModule, self).__init__()
+        
+        self.action_space = action_space
+        
+        self.fc = nn.Sequential(
+            nn.Linear(288 + action_space, 256),
+            nn.ReLU(),
+            nn.Linear(256, 288)
+        )
+        
+    
+    def forward(self, state, action):
+        x = torch.cat((state, action), dim=1)
+        return self.fc(x)
