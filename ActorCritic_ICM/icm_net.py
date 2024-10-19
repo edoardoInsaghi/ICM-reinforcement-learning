@@ -4,10 +4,8 @@ import torch
 
 
 class Reverse_Dynamics_Module(nn.Module):
-
     def __init__(self, channels_in=4, action_space=12):
         super(Reverse_Dynamics_Module, self).__init__()
-
 
         self.backbone = nn.Sequential(
             nn.Conv2d(channels_in, 32, kernel_size=3, stride=2, padding=1),

@@ -47,7 +47,6 @@ for episode in range(0, int(args.episodes)):
         done, last_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
         steps += len(player.values)
         r += np.sum(player.rewards)
-        print(r, done)
         
         v, loss = player.learn()
         training_step += 1

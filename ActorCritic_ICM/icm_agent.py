@@ -13,11 +13,9 @@ from torch.distributions import Categorical
 class ICM_Agent():
     def __init__(self, action_space, args, device):
         
-        self.reverse_net = Reverse_Dynamics_Module(4, action_space).to(device)
         self.forward_net = ForwardModule(action_space).to(device)
-        self.ac_net = AC_NET(4, action_space).to(device)
-        self.optimizer = optim.Adam(list(self.reverse_net.parameters()) + 
-                                    list(self.forward_net.parameters()) + 
+        self.ac_net = AC_NET(4, action_space, latent=True).to(device)
+        self.optimizer = optim.Adam(list(self.forward_net.parameters()) + 
                                     list(self.ac_net.parameters()), 
                                     lr=args.lr
                         )
@@ -79,7 +77,6 @@ class ICM_Agent():
         self.states = []
         self.last_state = None
         self.done = None
-        state = self.reverse_net.get_latent_state(state).unsqueeze(0)
         
         for _ in range(local_steps):
             
@@ -92,7 +89,7 @@ class ICM_Agent():
             
             state, reward, self.done, self.info = env.step(action)
             state = torch.tensor(np.asarray(state) / 255.0, dtype=torch.float32, device=device).unsqueeze(0).to(self.device)
-            self.reverse_net.get_latent_state(state)
+            self.ac_net.reverse.get_latent_state(state)
             
             self.states.append(state)
             self.actions.append(action)
@@ -113,7 +110,7 @@ class ICM_Agent():
     
     def learn(self):
         self.ac_net.train()
-        self.reverse_net.train()
+        self.ac_net.reverse.train()
         self.forward_net.train()
 
         actor_loss = 0.0
@@ -138,9 +135,9 @@ class ICM_Agent():
             next_state = self.states[i+1]
             a = torch.zeros(1, self.action_space).to(self.device)
             a[0, action] = 1.0
-            a_hat = self.reverse_net(state, next_state)
-            latent_state = self.reverse_net.get_latent_state(state)
-            latent_next_state = self.reverse_net.get_latent_state(next_state)
+            a_hat = self.ac_net.reverse(state, next_state)
+            latent_state = self.ac_net.reverse.get_latent_state(state)
+            latent_next_state = self.ac_net.reverse.get_latent_state(next_state)
             forward_out = self.forward_net(latent_state, a)
             
             reverse_loss = torch.abs(a - a_hat).sum()
@@ -156,7 +153,7 @@ class ICM_Agent():
         torch.nn.utils.clip_grad_norm_(self.ac_net.parameters(), 0.5)
         self.optimizer.step()
         
-        return next_value.item(), total_loss.item(), forward_loss.item()
+        return next_value.item(), total_loss.item()
             
         
         
