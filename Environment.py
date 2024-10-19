@@ -33,29 +33,33 @@ class FrameSkip(gym.Wrapper):
                 break
         
         return obs, total_reward / 10.0, done, info
+
     
-'''
-class FrameSkip(gym.Wrapper):
+class FrameSkipNoReward(gym.Wrapper):
     def __init__(self, env, skip=4):
-        super(FrameSkip, self).__init__(env)
-        self.skip = skip
+        super(FrameSkipNoReward, self).__init__(env)
+        self._skip = skip
+        self.current_score = 0
+        self.life = 3
 
     def step(self, action):
-        total_reward = 0.0
         done = False
-        info = {}
-        obs = None
-
-        for _ in range(self.skip):
+        for i in range(self._skip):
             obs, reward, done, info = self.env.step(action)
-            total_reward += reward
+            reward = 0
+            
+            self.current_score = info["score"]
             if done:
+                if info["flag_get"]:
+                    reward += 5
+                else:
+                    reward -= 5 
                 break
+        
+        return obs, reward, done, info
 
-        return obs, total_reward, done, info
-'''
 
-def new_env(movement_type, w, world, stage):
+def new_env(movement_type, w, world, stage, reward):
     env = gym_super_mario_bros.make('SuperMarioBros-{}-{}-v0'.format(world, stage))
     
     if movement_type == "simple":
@@ -63,7 +67,11 @@ def new_env(movement_type, w, world, stage):
     else:
         movement = COMPLEX_MOVEMENT
         
-    env = FrameSkip(env, 4)
+    if not reward:
+        env = FrameSkipNoReward(env, 4)
+    else: 
+        env = FrameSkip(env, 4,)
+        
     env = gym.wrappers.ResizeObservation(env, (w, w)) 
     env = GrayScaleObservation(env)     
     env = FrameStack(env, 4) 

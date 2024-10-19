@@ -1,13 +1,12 @@
 from audioop import avg
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 import torch
-from Agent import *
-from Logger import *
+from ActorCritic_ICM.icm_agent import ICM_Agent
+from ActorCritic_ICM.ac_agent import AC_Agent
 from Environment import *
 from arg_parse import *
-from Modules import *
+import torch
 
 args = get_args()
 
@@ -21,16 +20,19 @@ elif torch.backends.mps.is_available():
 else:
     print('Using device CPU')
 
-env = new_env(args.movement, args.pixels, args.world, args.stage)
-
 if args.movement == "simple":
-    action_space = 7
+        action_space = 7
 else:
     action_space= 12
+        
+if args.agent != "ac":
+    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=False)
+    player = ICM_Agent(action_space, args, device)
+else:
+    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=True)
+    player = AC_Agent(action_space, args, device)
     
-player = ICM_Agent(action_space, args, device)
 training_step = 0
-
 
 for episode in range(0, int(args.episodes)):
 
@@ -41,11 +43,12 @@ for episode in range(0, int(args.episodes)):
     r = 0
     
     while True:
-    
+        
         done, last_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster)
         steps += len(player.values)
         r += np.sum(player.rewards)
-
+        print(r, done)
+        
         v, loss = player.learn()
         training_step += 1
         if training_step % 250 == 0 and args.save_param != "":
