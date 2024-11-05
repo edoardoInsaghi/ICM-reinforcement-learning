@@ -6,7 +6,7 @@ def get_args():
     parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--gamma', type=float, default=0.9, help='discount factor for rewards')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-    parser.add_argument('--beta', type=float, default=0.01, help='entropy coefficient')
+    parser.add_argument('--beta', type=float, default=0.0001, help='entropy coefficient')
     parser.add_argument("--local_steps", type=int, default=50)
     parser.add_argument('--world', type=int, default=1, help='World number (1-8)')
     parser.add_argument('--stage', type=int, default=1, help='Stage number (1-4)')

@@ -9,17 +9,16 @@ class Reverse_Dynamics_Module(nn.Module):
 
         self.backbone = nn.Sequential(
             nn.Conv2d(channels_in, 32, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Flatten(),
             nn.Linear(1152, 288),
-            nn.ReLU(),
-        )
+            nn.ReLU(),)
         
         self.fc = nn.Sequential(
             nn.Linear(288*2, 256),
@@ -37,16 +36,13 @@ class Reverse_Dynamics_Module(nn.Module):
                 nn.init.constant_(module.bias, 0)
 
 
-    def forward(self, state, next_state):
-        B = state.shape[0]
-        state, next_state = self.backbone(state), self.backbone(next_state)
-        x = torch.cat((state, next_state), dim=1)
+    def forward(self, latent_state, latent_next_state):
+        x = torch.cat((latent_state, latent_next_state), dim=1)
         return self.fc(x)
         
     @torch.no_grad()
     def get_latent_state(self, state):
         B, C, H, W = state.shape
-        self.eval()
         state = self.backbone(state)
         return state.view(B, -1)
     

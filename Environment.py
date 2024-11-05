@@ -36,11 +36,11 @@ class FrameSkip(gym.Wrapper):
 
     
 class FrameSkipNoReward(gym.Wrapper):
-    def __init__(self, env, skip=4):
+    def __init__(self, env, skip=4, sparse=False):
         super(FrameSkipNoReward, self).__init__(env)
         self._skip = skip
-        self.current_score = 0
-        self.life = 3
+        self.sparse = sparse
+    
 
     def step(self, action):
         done = False
@@ -48,13 +48,17 @@ class FrameSkipNoReward(gym.Wrapper):
             obs, reward, done, info = self.env.step(action)
             reward = 0
             
-            self.current_score = info["score"]
-            if done:
-                if info["flag_get"]:
-                    reward += 5
-                else:
-                    reward -= 5 
-                break
+            if self.sparse:
+                if done:
+                    if info["flag_get"]:
+                        reward += 5
+                    else:
+                        reward -= 5 
+                    break
+            else:
+                if done:
+                    break    
+            
         
         return obs, reward, done, info
 
@@ -67,10 +71,12 @@ def new_env(movement_type, w, world, stage, reward):
     else:
         movement = COMPLEX_MOVEMENT
         
-    if not reward:
+    if reward == 0:
         env = FrameSkipNoReward(env, 4)
-    else: 
-        env = FrameSkip(env, 4,)
+    elif reward == 1: 
+        env = FrameSkipNoReward(env, 4, sparse=True)
+    else:
+        env = FrameSkip(env, 4)
         
     env = gym.wrappers.ResizeObservation(env, (w, w)) 
     env = GrayScaleObservation(env)     
