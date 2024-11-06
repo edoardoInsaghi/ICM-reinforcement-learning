@@ -1,0 +1,272 @@
+```{r}
+library(ggplot2)
+library(viridis)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+
+data1 = read.csv("data/dueling.txt", sep=",")
+data2 = read.csv("data/dueling2.txt", sep=",")
+data = rbind(data1, data2)
+data$i = 1:nrow(data)
+data = data %>% filter(i>1)
+  
+p_rewards = ggplot(data=data, aes(y=Rewards, x=i)) + 
+  geom_line() + 
+  geom_point(size=0.1) + 
+  labs(title="Rewards for the episode", x="epidsode") + 
+  theme_bw() + geom_smooth()
+p_rewards
+
+p_lengths = ggplot(data=data, aes(y=Lengths, x=i)) + 
+  geom_line() + geom_point(size=0.1) + labs(title="Lenght of the episode",
+                                    x="epidsode") + theme_bw()
+p_lengths
+
+p_loss = ggplot(data=data, aes(y=Loss, x=i)) + 
+  geom_line() + geom_point(size=0.1) + labs(title="Average Loss per episode",
+                                    x="epidsode") + theme_bw()
+p_loss
+
+p_q = ggplot(data=data, aes(y=Q1, x=i)) + 
+  geom_line() + geom_point(size=0.1) + labs(title="Average Q Value estimate",
+                                    x="epidsode") + theme_bw()
+p_q
+
+p_dist = ggplot(data=data, aes(y=Best_Distances, x=i)) + 
+  geom_line() + geom_point(size=0.1) + labs(title="Best distance reached in the episode",
+                                    x="epidsode") + theme_bw() + geom_smooth()
+p_dist
+
+```
+
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+library(zoo)
+
+cnames = c("episode", "reward", "distance", "level_complete", "duration", "training_steps")
+
+data1 = read.csv("data/ac1.txt", sep=",")
+colnames(data1) = cnames
+ep1 = data1$episode[nrow(data1)]
+ts1 = data1$training_steps[nrow(data1)]
+
+data2 = read.csv("data/ac2.txt", sep=",")
+colnames(data2) = cnames
+data2$episode = data2$episode + rep(ep1, nrow(data2))
+data2$training_steps = data2$training_steps + rep(ts1, nrow(data2))
+ep2 = data2$episode[nrow(data2)]
+ts2 = data2$training_steps[nrow(data2)]
+
+data3 = read.csv("data/ac3.txt", sep=",")
+colnames(data3) = cnames
+data3$episode = data3$episode + rep(ep2, nrow(data3))
+data3$training_steps = data3$training_steps + rep(ts2, nrow(data3))
+ep3 = data3$episode[nrow(data3)]
+ts3 = data3$training_steps[nrow(data3)]
+
+data4 = read.csv("data/ac4.txt", sep=",")
+colnames(data4) = cnames
+data4$episode = 1:nrow(data4)
+data4$training_steps[33:nrow(data4)] = data4$training_steps[33:nrow(data4)] - rep(680, nrow(data4) - 33)
+data4$episode = data4$episode + rep(ep3, nrow(data4))
+data4$training_steps = data4$training_steps + rep(ts3, nrow(data4))
+ep4 = data4$episode[nrow(data4)]
+ts4 = data4$training_steps[nrow(data4)]
+
+data5 = read.csv("data/ac5.txt", sep=",")
+colnames(data5) = cnames
+data5$episode = data5$episode + rep(ep4, nrow(data5))
+data5$training_steps = data5$training_steps + rep(ts4, nrow(data5))
+ep5 = data5$episode[nrow(data5)]
+ts5 = data5$training_steps[nrow(data5)]
+
+data6 = read.csv("data/ac6.txt", sep=",")
+colnames(data6) = cnames
+data6$episode = data6$episode + rep(ep5, nrow(data6))
+data6$training_steps = data6$training_steps + rep(ts5, nrow(data6))
+ep6 = data6$episode[nrow(data6)]
+ts6 = data6$training_steps[nrow(data6)]
+
+data7 = read.csv("data/ac7.txt", sep=",")
+colnames(data7) = cnames
+data7$episode = data7$episode + rep(ep6, nrow(data7))
+data7$training_steps = data7$training_steps + rep(ts6, nrow(data7))
+ep7 = data7$episode[nrow(data7)]
+ts7 = data7$training_steps[nrow(data7)]
+
+data8 = read.csv("data/ac8.txt", sep=",")
+colnames(data8) = cnames
+data8$episode = data8$episode + rep(ep7, nrow(data8))
+data8$training_steps = data8$training_steps + rep(ts7, nrow(data8))
+ep8 = data8$episode[nrow(data8)]
+ts8 = data8$training_steps[nrow(data8)]
+
+data9 = read.csv("data/ac9.txt", sep=",")
+colnames(data9) = cnames
+data9$episode = data9$episode + rep(ep8, nrow(data9))
+data9$training_steps = data9$training_steps + rep(ts8, nrow(data9))
+ep9 = data9$episode[nrow(data9)]
+ts9 = data9$training_steps[nrow(data9)]
+
+data10 = read.csv("data/ac10.txt", sep=",")
+colnames(data10) = cnames
+data10$episode = data10$episode + rep(ep9, nrow(data10))
+data10$training_steps = data10$training_steps + rep(ts9, nrow(data10))
+ep10 = data10$episode[nrow(data10)]
+ts10 = data10$training_steps[nrow(data10)]
+
+data11 = read.csv("data/ac11.txt", sep=",")
+colnames(data11) = cnames
+data11$episode = data11$episode + rep(ep10, nrow(data11))
+data11$training_steps = data11$training_steps + rep(ts10, nrow(data11))
+ep11 = data11$episode[nrow(data11)]
+ts11 = data11$training_steps[nrow(data11)]
+
+data12 = read.csv("data/ac12.txt", sep=",")
+colnames(data12) = cnames
+data12$episode = data12$episode + rep(ep11, nrow(data12))
+data12$training_steps = data12$training_steps + rep(ts11, nrow(data12))
+ep12 = data12$episode[nrow(data12)]
+ts12 = data12$training_steps[nrow(data12)]
+
+
+data = rbind(data1, data2, data3, data4, data5, data6, 
+             data7, data8, data9, data10, data11, data12)
+
+window_size = 100
+
+data = data %>%
+  mutate(
+    ma_reward = rollmean(reward, k = window_size, fill = NA, align = "right"),
+    rolling_sd = rollapply(reward, width = window_size, FUN = sd, fill = NA, align = "right"),
+    lower_bound = ma_reward - 1 * rolling_sd, 
+    upper_bound = ma_reward + 1 * rolling_sd,
+    ma_dist = rollmean(distance, k = window_size, fill = NA, align = "right"),
+    rolling_sd_dist = rollapply(distance, width = window_size, FUN = sd, fill = NA, align = "right"),
+    lower_bound_dist = ma_dist - 1 * rolling_sd_dist, 
+    upper_bound_dist = ma_dist + 1 * rolling_sd_dist
+  )
+
+
+p_reward = ggplot(data=data, aes(x=training_steps, y=reward, color=distance)) + 
+  geom_line(size=0.04) + 
+  geom_line(aes(x=training_steps, y=ma_reward), size=0.4, color="black") + 
+  scale_color_viridis() +
+  labs(title="Total Reward per Episode", x="Number of Gradient Updates", y="Reward") + 
+  theme_bw()
+p_reward
+
+p_distance = ggplot(data=data, aes(x=episode, y=reward, color=distance)) + 
+  geom_line(size=0.04) + 
+  geom_line(aes(x=episode, y=ma_reward), size=0.4, color="black") + 
+  scale_color_viridis() + 
+  labs(title="Total Reward per Episode", x="Episode", y="Reward") + 
+  theme_bw()
+p_distance
+
+p_steps = ggplot(data=data, aes(x=episode, y=duration)) + 
+  geom_line(size=0.04, color="indianred") +
+  labs(title="Duration of the episode", x="Episode", y="Duration (frames)") + 
+  theme_bw()
+p_steps
+
+
+conf_min = 60 - 33.24533
+conf_max = 60 + 33.24533
+p = ggplot(data=data, aes(x=episode, y=ma_reward)) + geom_line(color="blue") + 
+  labs(title="Total Reward per Episode (moving average, k=100)", x="Episode", y="Reward") + 
+  geom_ribbon(aes(ymin=lower_bound, ymax=upper_bound), alpha=0.4, fill="skyblue") +
+  ylim(0, 350) +
+  geom_segment(aes(x=0, xend=29559, y=60, yend=60), color="red", size=0.5) +
+  geom_ribbon(aes(ymin = conf_min, ymax = conf_max), fill = "indianred", alpha = 0.2) +
+  theme_bw()
+p
+
+
+conf_min_dist = 727.1405 - 379.021
+conf_max_dist = 727.1405 + 379.021
+p_dist = ggplot(data=data, aes(x=episode, y=ma_dist)) + geom_line(color="blue") + 
+  labs(title="Distance reached per Episode (moving average, k=100)", x="Episode", y="Distance") + 
+  geom_ribbon(aes(ymin=lower_bound_dist, ymax=upper_bound_dist), alpha=0.4, fill="skyblue") +
+  geom_segment(aes(x=0, xend=29559, y=727, yend=727), color="red", size=0.5) +
+  geom_ribbon(aes(ymin = conf_min_dist, ymax = conf_max_dist), fill = "indianred", alpha = 0.2) +
+  theme_bw()
+p_dist
+  
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+library(zoo)
+
+cnames = c("episode", "reward", "distance", "level_complete", "duration")
+
+data1 = read.csv("random_complex.txt", sep=",")
+colnames(data1) = cnames
+ep1 = data1$episode[nrow(data1)]
+ts1 = data1$training_steps[nrow(data1)]
+
+data2 = read.csv("random_complex2.txt", sep=",")
+colnames(data2) = cnames
+data2$episode = data2$episode + rep(ep1, nrow(data2))
+ep2 = data2$episode[nrow(data2)]
+ts2 = data2$training_steps[nrow(data2)]
+
+data = rbind(data1, data2)
+data$ma_distance = rollmean(data$distance, align="right", k=50, fill=NA)
+
+p_distance = ggplot(data=data, aes(x=episode, y=distance, color=reward)) + 
+  geom_line(size=0.2) + 
+  geom_line(aes(x=episode, y=ma_distance), size=1, color="black") + 
+  scale_color_viridis() + 
+  labs(title="Total Reward per Episode", x="Episode", y="Reward") + 
+  theme_bw()
+p_distance
+
+p_steps = ggplot(data=data, aes(x=episode, y=duration)) + 
+  geom_point(size=0.2, color="indianred") +
+  labs(title="Duration of the episode", x="Episode", y="Duration (frames)") + 
+  theme_bw()
+p_steps
+
+mean(data$reward)
+sd(data$reward)
+mean(data$distance)
+sd(data$distance)
+```
+
+
+```{r}
+icm_data = read.csv("data/icm.csv")
+colnames(icm_data) = c("episode", "reward", "distance", "level_complete", "duration")
+icm_data$episode = 1:nrow(icm_data)
+
+icm_data = icm_data %>%
+  mutate(
+    ma_dist = rollmean(distance, k = window_size, fill = NA, align = "right"),
+    rolling_sd_dist = rollapply(distance, width = window_size, FUN = sd, fill = NA, align = "right"),
+    lower_bound_dist = ma_dist - 1 * rolling_sd_dist, 
+    upper_bound_dist = ma_dist + 1 * rolling_sd_dist
+  )
+
+conf_min_dist = 479.0939 - 238.8862
+conf_max_dist = 479.0939 + 238.8862
+p = ggplot(data=icm_data, aes(x=episode, y=ma_dist)) + geom_line(color="blue") + 
+  labs(title="Distance reached per Episode (moving average, k=100)", x="Episode", y="Distance") + 
+  geom_ribbon(aes(ymin=lower_bound_dist, ymax=upper_bound_dist), alpha=0.4, fill="skyblue") +
+  geom_segment(aes(x=0, xend=16616, y=479.09, yend=479.09), color="red", size=0.5) +
+  geom_ribbon(aes(ymin = conf_min_dist, ymax = conf_max_dist), fill = "indianred", alpha = 0.2) +
+  theme_bw()
+p
+
+
+```
+

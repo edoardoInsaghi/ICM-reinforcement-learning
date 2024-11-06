@@ -28,35 +28,42 @@ class AC_Agent():
         self.done = False
         self.info = None
         self.counter = 0
+        self.v = []
 
     
-    def plot_stats(self, q, action, color, v=None, ax=None):
-        plt.clf()
-        bars = plt.bar(range(len(q)), q, width=0.4)
-        bars[action].set_color(color)
-        plt.xlabel('Actions')
-        plt.ylabel('Policy-values')
-        plt.tight_layout()
+    def plot_stats(self, q, action, color, v, ax):
+        ax1, ax2 = ax
+        self.v.append(v)
+        if len(self.v) > 100:
+            self.v = self.v[1:]
+        ax1.clear()
+        ax2.clear()
+        bars1 = ax1.bar(range(len(q)), q, width=0.4)
+        bars1[action].set_color(color)
+        ax1.set_xlabel('Actions')
+        ax1.set_ylabel('Q-values')
+        ax2.plot(self.v, label="Value1")
         plt.draw()
         plt.pause(0.001)
-        plt.show(block=False)   
-    
-    
-        
-    def act(self, state, show_stats=True):
+        plt.show(block=False)
+
+
+    def act(self, state, show_stats=True, ax=None):
         self.counter += 1
         color = 'r'
         
         with torch.no_grad():
             state = state.to(self.device)
-            logits= self.net(state, model=1)
+            logits = self.net(state, model=1)
             p = torch.softmax(logits, dim=1)
+
+            v = self.net(state, model=2).item()
             
             m = Categorical(p)
             action = m.sample().item()
         
-        if show_stats and self.counter % 2 == 0:
-            self.plot_stats(p.squeeze().detach().cpu().numpy(), action, color)
+        if show_stats and self.counter % 1 == 0:
+            self.plot_stats(p.squeeze().detach().cpu().numpy(), action, color, v, ax)
             
         
         return action
@@ -72,7 +79,7 @@ class AC_Agent():
         
         for _ in range(local_steps):
             
-            action = self.act(state, show_stats=show_stats)
+            action = self.act(state, show_stats=show_stats, ax=ax)
             logits= self.net(state, model=1)
             value = self.net(state, model=2)
             policy = torch.softmax(logits, dim=1)

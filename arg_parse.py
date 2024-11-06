@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument("--agent", type=str, default="ac")
     parser.add_argument("--save_file", type=str, default="")
     parser.add_argument("--save_param", type=str, default="")
-    parser.add_argument("--load_param", type=str, default="")
+    parser.add_argument("--load_param", type=str, default="weights/ac12.pth")
     parser.add_argument("--algo", type=str, default='fdqn')
     parser.add_argument("--warmup", type=int, default=1000)
     args = parser.parse_args()

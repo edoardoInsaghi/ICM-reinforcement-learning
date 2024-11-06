@@ -9,13 +9,13 @@ class AC_NET(nn.Module):
 
         self.backbone = nn.Sequential(
                 nn.Conv2d(channels_in, 32, kernel_size=3, stride=2, padding=1),
-                nn.ELU(),
+                nn.ReLU(),
                 nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-                nn.ELU(),
+                nn.ReLU(),
                 nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-                nn.ELU(),
+                nn.ReLU(),
                 nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-                nn.ELU(),)
+                nn.ReLU(),)
         
         self.fc = nn.Linear(32 * 6 * 6, 512)
         self.critic_linear = nn.Linear(512, 1)
