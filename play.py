@@ -32,7 +32,7 @@ else:
     action_space= 12
         
 if args.agent != "ac":
-    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=1)
+    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=0)
     player = ICM_Agent(action_space, args, device)
     if args.load_param != "":
         ac_save = torch.load(f"{args.load_param}1", map_location=torch.device(device))

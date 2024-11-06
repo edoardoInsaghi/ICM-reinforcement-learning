@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument("--agent", type=str, default="notac")
     parser.add_argument("--save_file", type=str, default="")
     parser.add_argument("--save_param", type=str, default="")
-    parser.add_argument("--load_param", type=str, default="weights/icm")
+    parser.add_argument("--load_param", type=str, default="weights/icm_no_r")
     parser.add_argument("--algo", type=str, default='fdqn')
     parser.add_argument("--warmup", type=int, default=1000)
     args = parser.parse_args()
