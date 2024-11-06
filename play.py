@@ -32,10 +32,19 @@ else:
     action_space= 12
         
 if args.agent != "ac":
-    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=False)
+    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=1)
     player = ICM_Agent(action_space, args, device)
+    if args.load_param != "":
+        ac_save = torch.load(f"{args.load_param}1", map_location=torch.device(device))
+        rev_save = torch.load(f"{args.load_param}2", map_location=torch.device(device))
+        forward_save = torch.load(f"{args.load_param}3", map_location=torch.device(device))
+        player.reverse.load_state_dict(rev_save)
+        player.ac_net.load_state_dict(ac_save)
+        player.forward_net.load_state_dict(forward_save)
+        print("Loaded parameters")
+    
 else:
-    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=True)
+    env = new_env(args.movement, args.pixels, args.world, args.stage, reward=False)
     player = AC_Agent(action_space, args, device)
     if args.load_param != "":
         player.net.load_state_dict(torch.load(args.load_param, map_location=device))
@@ -54,15 +63,9 @@ for episode in range(0, int(args.episodes)):
         
         done, last_state = player.get_experience(env, state, args.local_steps, device, show_stats=not args.cluster, ax=ax)
         steps += len(player.values)
-        r += np.sum(player.rewards)
-        
-        training_step += 1
+
         if done:
-            if args.save_file != "":
-                with open(args.save_file, 'a') as f:
-                    f.write(f"{episode},{r},{player.info['x_pos']},{player.info['flag_get']},{steps}\n")
-            if player.info["flag_get"] == True:
-                    break         
+            env.reset()
             break
         
         state = last_state

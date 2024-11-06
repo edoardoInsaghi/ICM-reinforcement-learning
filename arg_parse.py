@@ -2,7 +2,7 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--movement", type=str, default="simple")
+    parser.add_argument("--movement", type=str, default="complex")
     parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--gamma', type=float, default=0.9, help='discount factor for rewards')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size')
@@ -20,10 +20,10 @@ def get_args():
     parser.add_argument("--sync_every", type=int, default=1000)
     parser.add_argument("--pixels", type=int, default=84)
     parser.add_argument("--learn_every", type=int, default=4)
-    parser.add_argument("--agent", type=str, default="ac")
+    parser.add_argument("--agent", type=str, default="notac")
     parser.add_argument("--save_file", type=str, default="")
     parser.add_argument("--save_param", type=str, default="")
-    parser.add_argument("--load_param", type=str, default="weights/ac12.pth")
+    parser.add_argument("--load_param", type=str, default="weights/icm")
     parser.add_argument("--algo", type=str, default='fdqn')
     parser.add_argument("--warmup", type=int, default=1000)
     args = parser.parse_args()
