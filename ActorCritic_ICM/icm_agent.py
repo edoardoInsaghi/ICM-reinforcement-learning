@@ -141,8 +141,6 @@ class ICM_Agent():
         next_value = R
         
         for i, (value, action, state, log_policy, reward, entropy) in enumerate(list(zip(self.values, self.actions, self.states, self.log_policies, self.rewards, self.entropies))[-2::-1]):
-            gae = gae * self.gamma 
-            gae = gae + reward + self.gamma * next_value.detach() - value.detach()
             next_value = value
             R = R * self.gamma + reward
             
@@ -157,7 +155,7 @@ class ICM_Agent():
             reverse_loss = reverse_loss + torch.nn.functional.cross_entropy(a_hat, torch.tensor(action).unsqueeze(0).to(self.device))
             forward_loss = forward_loss + torch.nn.functional.mse_loss(forward_out, latent_next_state, reduction='sum') * 1/2
             
-            actor_loss = actor_loss + (log_policy * gae)  
+            actor_loss = actor_loss + log_policy * (R - value)  
             critic_loss = critic_loss + ((R - value) ** 2 / 2)
             entropy_loss = entropy_loss + entropy
 
