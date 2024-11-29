@@ -123,11 +123,9 @@ class AC_Agent():
         next_value = R
         
         for value, log_policy, reward, entropy in list(zip(self.values, self.log_policies, self.rewards, self.entropies))[::-1]:
-            gae = gae * self.gamma 
-            gae = gae + reward + self.gamma * next_value.detach() - value.detach()
             next_value = value
             R = R * self.gamma + reward
-            actor_loss = actor_loss + (log_policy * gae)  
+            actor_loss = actor_loss + log_policy * (R - value)
             critic_loss = critic_loss + ((R - value) ** 2 / 2)
             entropy_loss = entropy_loss + entropy
 
@@ -157,11 +155,9 @@ class AC_Agent():
         next_value = R
         
         for value, log_policy, reward, entropy in list(zip(self.values, self.log_policies, self.rewards, self.entropies))[::-1]:
-            gae = gae * self.gamma 
-            gae = gae + reward + self.gamma * next_value.detach() - value.detach()
             next_value = value
             R = R * self.gamma + reward
-            actor_loss = actor_loss + (log_policy * gae)  
+            actor_loss = actor_loss + log_policy * (R - value)
             critic_loss = critic_loss + ((R - value) ** 2 / 2)
             entropy_loss = entropy_loss + entropy
 
